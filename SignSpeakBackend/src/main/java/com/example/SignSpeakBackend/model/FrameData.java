@@ -3,7 +3,6 @@ package com.example.SignSpeakBackend.model;
 import java.util.List;
 
 public class FrameData {
-    // Performance timestamp from frontend (ms since page load)
     private double timestamp;
 
     // Server-side metadata
