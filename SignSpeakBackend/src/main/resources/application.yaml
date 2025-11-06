@@ -1,0 +1,34 @@
+spring:
+  application:
+    name: SignSpeakBackend
+
+server:
+  port: 8080
+  address: 0.0.0.0
+
+
+ml:
+  system:
+    url: http://localhost:8081/ml/process #Link to ml system
+
+frame:
+  selection:
+    count: 30
+
+logging:
+  level:
+    com.example.SignSpeakBackend: INFO
+    org.springframework.web.socket: DEBUG
+
+#Enabling swagger ui
+springfox:
+  documentation:
+    swagger-ui:
+      enabled: true
+
+#Custom path
+#springdoc.api-docs.path=/api-docs
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui-custom.html

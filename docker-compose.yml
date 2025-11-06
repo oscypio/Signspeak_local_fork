@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+
+  signspeak-backend:
+    build:
+      context: ./SignSpeakBackend
+      dockerfile: Dockerfile
+    container_name: signspeak-backend
+    ports:
+      - "8080:8080"
