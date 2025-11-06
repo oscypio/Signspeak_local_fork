@@ -1,6 +1,10 @@
 # SignSpeak
 
-**Backend**
+## I. **Frontend**
+<!-- Add your comment here -->
+
+
+## II. **Backend**
 - Just run **docker compose up** and the docker container should be running at the 8080 port of your machine. (Of course, install docker)
 
 - Format of the data being sent by the Frontend:
@@ -149,3 +153,7 @@ this.stompClient.publish({
 According to that: 
 
 **The ML Client service that will be defined in the docker compose file should expose 8081, and the endpoints in the code should be "/ml/process"**
+
+
+## III. **ML System**
+<!-- Add your comment here -->
