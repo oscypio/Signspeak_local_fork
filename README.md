@@ -3,7 +3,7 @@
 **Backend**
 - Just run **docker compose up** and the docker container should be running at the 8080 port of your machine. (Of course, install docker)
 
-- Format of the data being sent by Jinet:
+- Format of the data being sent by the Frontend:
 <pre>
 {
   "timestamp": 31034.30000001192,
@@ -45,7 +45,7 @@
 </pre>
 
 
-- Format of the data I'm sending to Michal & Mohammed. I added two fields: 
+- Format of the data I'm sending to ML part. I added two fields: 
     - sequenceNumber: rank in the list sent. 
     - receivedAt-the moment it's received in the backend:
 <pre>
@@ -89,6 +89,57 @@
   ]
 }
 </pre>
+
+1.  Configurations > Frontend:
+- Webscoket endpoint: '/ws'
+- Make sure the stompClient subscribe to: '/topic/status'
+- Publish the data to this endpoint: '/app/frame'  
+
+<pre>
+  connect() {
+    const socket = new SockJS('http://localhost:8080/ws');
+    
+    this.stompClient = new Client({
+      webSocketFactory: () => socket as any,
+      debug: (str) => {
+        console.log('STOMP: ' + str);
+      },
+      reconnectDelay: 5000,
+      heartbeatIncoming: 4000,
+      heartbeatOutgoing: 4000,
+    });
+    
+    this.stompClient.onConnect = () => {
+      console.log('Connected to WebSocket');
+      this.isConnected = true;
+      this.addStatus('Connected to server');
+      
+      this.stompClient?.subscribe('/topic/status', (message: IMessage) => {
+        this.addStatus('Server: ' + message.body);
+      });
+    };
+    
+    this.stompClient.onStompError = (frame) => {
+      console.error('Broker error: ' + frame.headers['message']);
+      console.error('Details: ' + frame.body);
+      this.isConnected = false;
+      this.addStatus('Connection error');
+    };
+    
+    this.stompClient.activate();
+  }
+</pre>
+
+And when sending:
+
+<pre>
+this.stompClient.publish({
+  destination: '/app/frame',
+  body: JSON.stringify(frameData)
+});
+</pre>
+
+2.  Configurations > ML System:
 
 **Might be cool to have the same fields name in the ML system. (So, If a field is not needed, you can just ignore it and I will not need to modify the fields name again 😈)**
 
