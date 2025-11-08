@@ -4,9 +4,8 @@ import { getWebcamStream } from '../services/WebcamCaptureService';
 import { MediaPipeService } from '../services/MediaPipeService';
 import { WebSocketManager } from '../services/WebSocketManager';
 import ControlPanel from '../components/ControlPanel';
-import VideoCapture from '../components/VideoCapture';
-
-const BACKEND_URL = "ws://localhost:8080/ws/landmarks";
+import VideoDisplay from '../components/VideoDisplay';
+import TextDisplay from '../components/TextDisplay';
 
 function TranslationPage() {
 
@@ -15,48 +14,112 @@ function TranslationPage() {
     const videoRef = useRef(null);
     const mediaPipeService = useRef(new MediaPipeService()).current;
     const wsManager = useRef(new WebSocketManager()).current;
+    const [status, setStatus] = useState('IDLE');
+    const [translatedText, setTranslatedText] = useState('');
 
+    /**
+     * Handles incoming messages from the WebSocket.
+     * Expects either status messages (plain text) or translations (JSON).
+     */
     const handleBackendMessage = (message) => {
-        console.log("Message from backend:", message);
+        if (message && typeof message === 'string' && message.trim().startsWith('{')) {
+
+            try {
+                const data = JSON.parse(message);
+
+                if (data.text) {
+                    setTranslatedText(data.text);
+
+                    console.log("Final translation received. Disconnecting.");
+                    wsManager.disconnect();
+
+                    setStatus('IDLE');
+                }
+            } catch (error) {
+                console.error("Failed to parse malformed JSON message:", error, message);
+            }
+
+        }
     };
 
+    /**
+     * Callback for MediaPipe. Sends landmarks to the WebSocketManager.
+     */
     const handleLandmarks = (results, timestamp) => {
         if (results) {
             wsManager.sendHandData(results, timestamp);
         }
     };
 
+    /**
+     * Starts the entire process: connection, webcam, and MediaPipe.
+     */
     const handleStart = async () => {
-        console.log("Starting webcam...");
-        const stream = await getWebcamStream();
-        if (stream) {
-            setMediaStream(stream);
-            setIsWebcamOn(true);
-            console.log("Connecting to WebSocket backend...");
-            wsManager.connect(BACKEND_URL, handleBackendMessage);
-            console.log("Initializing MediaPipe...");
-            await mediaPipeService.initialize(handleLandmarks);
-            setTimeout(() => {
-                if (videoRef.current) {
-                    mediaPipeService.startProcessing(videoRef.current);
-                    console.log("MediaPipe processing started.");
+        console.log("Connecting to Websocket...");
+        setStatus('CONNECTING');
+        setTranslatedText('');
+
+        wsManager.connect({
+            onOpen: async () => {
+                console.log("Websocket Connected. Requesting webcam...");
+                const stream = await getWebcamStream();
+
+                if (stream) {
+                    setMediaStream(stream);
+                    setIsWebcamOn(true);
+                    setStatus('LISTENING');
+
+                    console.log("Initializing MediaPipe...");
+                    await mediaPipeService.initialize(handleLandmarks);
+
+                    setTimeout(() => {
+                        if (videoRef.current) {
+                            mediaPipeService.startProcessing(videoRef.current);
+                            console.log("MediaPipe processing started.");
+                        }
+                    }, 100);
+                } else {
+                    console.log("Webcam permission denied.");
+                    setStatus('IDLE');
+                    wsManager.disconnect();
                 }
-            }, 500);
-        }
+            },
+            onMessage: handleBackendMessage,
+            onError: (error) => {
+                console.error("Failed to connect to WebSocket.", error);
+                setStatus('ERROR');
+            },
+            onClose: () => {
+                setStatus((currentState) => {
+                    if (currentState !== 'IDLE' && currentState !== 'ERROR') {
+                        console.log("WebSocket connection closed by server.");
+                        return 'ERROR';
+                    }
+                    return currentState;
+                });
+            }
+        });
     };
 
+    /**
+     * Stops the webcam and MediaPipe, then waits for the final translation.
+     */
     const handleStop = () => {
-        console.log("Stopping webcam...");
+        console.log("Stopping webcam... waiting for final translation");
         if (mediaStream) {
             mediaStream.getTracks().forEach(track => track.stop());
         }
         setMediaStream(null);
         setIsWebcamOn(false);
+
         mediaPipeService.stopProcessing();
-        console.log("Disconnecting from WebSocket...");
-        wsManager.disconnect();
+
+        setStatus('PROCESSING')
     };
 
+    /**
+     * Single handler for the Start/Stop button.
+     */
     const toggleWebcam = () => {
         if (isWebcamOn) {
             handleStop();
@@ -65,16 +128,35 @@ function TranslationPage() {
         }
     };
 
+    /**
+     * Simulation function for testing the UI.
+     */
+    const simulateReceive = () => {
+        const mockMessage = JSON.stringify({ text: "This is a simulated translation from the backend." });
+        handleBackendMessage(mockMessage);
+    };
+
     return (
         <main className="main-content">
+
             <section className="video-section">
-                <VideoCapture ref={videoRef} stream={mediaStream} />
+                <VideoDisplay
+                    ref={videoRef}
+                    status={status}
+                    stream={mediaStream}
+                />
                 <ControlPanel
                     onClick={toggleWebcam}
                     isWebcamOn={isWebcamOn}
+                    status={status}
                 />
             </section>
 
+            <TextDisplay text={translatedText} />
+
+            <button onClick={simulateReceive} style={{marginTop: '1rem'}}>
+                Simulate Backend Message
+            </button>
         </main>
     );
 }

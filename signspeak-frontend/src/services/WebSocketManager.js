@@ -1,69 +1,105 @@
+import { Client } from '@stomp/stompjs';
+import SockJS from 'sockjs-client';
+
+/**
+ * Manages the STOMP connection over SockJS to the backend.
+ */
 export class WebSocketManager {
-    socket = null;
-    onMessageCallback = null;
+    stompClient = null;
 
     /**
-     * Establishes a WebSocket connection to the given URL.
-     * @param {string} url - The backend WebSocket URL.
-     * @param {function} onMessage - Callback function for received messages.
+     * Establishes a STOMP connection.
+     * @param {object} callbacks - An object with { onOpen, onMessage, onError, onClose }
      */
-    connect(url, onMessage) {
-        // Ensure no existing connection
-        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            console.log("WebSocket is already connected.");
-            return;
+    connect(callbacks = {}) {
+        // Provide default empty functions for callbacks
+        const { onOpen = () => {}, onMessage = () => {}, onError = () => {}, onClose = () => {} } = callbacks;
+        try {
+            const socket = new SockJS('http://localhost:8080/ws');
+
+            socket.onclose = (event) => {
+                console.error('SockJS connection closed:', event.reason || 'Cannot connect');
+                onClose(event);
+            };
+
+            socket.onerror = (error) => {
+                console.error('SockJS error:', error);
+                onError(error);
+            };
+
+            this.stompClient = new Client({
+                webSocketFactory: () => socket,
+                debug: (str) => {
+                    console.log('STOMP: ' + str);
+                },
+                reconnectDelay: 0,
+                heartbeatIncoming: 0,
+                heartbeatOutgoing: 0,
+            });
+
+            // Handle the successful connection event
+            this.stompClient.onConnect = () => {
+                console.log('STOMP: Connected to WebSocket');
+                onOpen();
+
+                // Subscribe to the topic to receive translations
+                this.stompClient.subscribe('/topic/status', (message) => {
+                    console.log('STOMP: Message received:', message.body);
+                    onMessage(message.body);
+                });
+            };
+
+            // Handle STOMP errors
+            this.stompClient.onStompError = (frame) => {
+                console.error('STOMP Error: ' + frame.headers['message']);
+                console.error('STOMP Details: ' + frame.body);
+                onError(frame);
+            };
+
+            // Handle disconnection
+            this.stompClient.onDisconnect = (frame) => {
+                console.log('STOMP: Disconnected');
+                onClose(frame);
+            };
+
+            // Activate the client to start the connection
+            this.stompClient.activate();
+        } catch (error){
+            console.error("Failed to initialize connection:", error);
+            onError(error);
         }
-
-        this.socket = new WebSocket(url);
-        this.onMessageCallback = onMessage;
-
-        this.socket.onopen = () => {
-            console.log("WebSocket connection established.");
-        };
-
-        this.socket.onmessage = (event) => {
-            // Pass the received data to the callback function
-            if (this.onMessageCallback) {
-                this.onMessageCallback(event.data);
-            }
-        };
-
-        this.socket.onerror = (error) => {
-            console.error("WebSocket error:", error);
-        };
-
-        this.socket.onclose = () => {
-            console.log("WebSocket connection closed.");
-        };
     }
 
     /**
-     * Sends formatted hand data (landmarks, handedness, timestamp) to the backend.
+     * Sends hand landmark data to the backend.
      */
     sendHandData(results, timestamp) {
+        if (!this.stompClient || !this.stompClient.connected) {
+            console.warn("STOMP client is not connected. Cannot send data.");
+            return;
+        }
+
         const dataPacket = {
             timestamp: timestamp,
             landmarks: results.landmarks,
             handedness: results.handedness
         };
 
-        console.log("Sending data to backend:", JSON.stringify(dataPacket));
-
-        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            // Convert the landmark data to a JSON string before sending
-            this.socket.send(JSON.stringify(dataPacket));
-        } else {
-            console.warn("WebSocket is not open. Cannot send landmarks.");
-        }
+        // Publish the data to the correct destination
+        this.stompClient.publish({
+            destination: '/app/frame',
+            body: JSON.stringify(dataPacket)
+        });
     }
 
     /**
-     * Closes the WebSocket connection.
+     * Deactivates the STOMP client (closes the connection).
      */
     disconnect() {
-        if (this.socket) {
-            this.socket.close();
-            this.socket = null;
+        if (this.stompClient && this.stompClient.connected) {
+            this.stompClient.deactivate();
+        } else {
+            console.log("STOMP client already disconnected or not initialized.");
         }
     }
 }

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import HomePage from './pages/HomePage';
-import Header from './components/Header.jsx'
+import Header from './components/Header'
 import TranslationPage from './pages/TranslationPage';
 import './styles/index.css';
 

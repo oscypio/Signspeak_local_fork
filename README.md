@@ -1,8 +1,31 @@
 # SignSpeak
 
 ## I. **Frontend**
-<!-- Add your comment here -->
+The frontend is a **React (Vite)** application that manages the entire user experience and client-side processing. It runs entirely in the user's browser.
 
+### Key Responsibilities
+
+* **Webcam Capture:** Accesses the user's camera via `navigator.mediaDevices.getUserMedia`.
+* **Landmark Extraction:** Uses the **MediaPipe** library (running client-side) to extract hand landmarks from the video stream in real-time. **No raw video ever leaves the client**.
+* **State Management:** Manages the application's state machine (`IDLE`, `CONNECTING`, `LISTENING`, `PROCESSING`, `ERROR`) to provide clear user feedback and disable buttons when necessary.
+* **Real-time Communication:** Uses **SockJS** and **STOMP** to stream the compact landmark data to the Backend (on the `/app/frame` destination) and subscribe to the final translations (from the `/topic/status` topic).
+* **UI Rendering:** Displays the live video feed, status indicators, and the final translated text.
+
+### Running in Development Mode (Without Docker)
+1.  **Ensure the Backend is Running:** The backend (started via `docker compose up`) must be active on `localhost:8080` for the WebSocket to connect.
+2.  Navigate to the frontend directory:
+    ```bash
+    cd singspeak-frontend
+    ```
+3.  Install the dependencies:
+    ```bash
+    npm install
+    ```
+4.  Start the development server:
+    ```bash
+    npm run dev
+    ```
+5.  The application will be available at `http://localhost:5173` (or the port shown by Vite).
 
 ## II. **Backend**
 - Just run **docker compose up** and the docker container should be running at the 8080 port of your machine. (Of course, install docker)
