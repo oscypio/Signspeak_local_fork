@@ -3,6 +3,7 @@ import HomePage from './pages/HomePage';
 import Header from './components/Header'
 import TranslationPage from './pages/TranslationPage';
 import './styles/index.css';
+import Footer from './components/footer';
 
 function App() {
     const [currentPage, setCurrentPage] = useState('home');
@@ -28,6 +29,7 @@ function App() {
             <main className="main-content">
                 {renderPage()}
             </main>
+            <Footer />
         </div>
     );
 }
