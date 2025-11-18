@@ -1,0 +1,238 @@
+.home-page {
+  background-color: #ffffff;
+}
+
+/* Introduction Section */
+.intro-section {
+  background-color: #C1E6EB;
+  padding: 4rem 2rem;
+  text-align: center;
+}
+
+.intro-content {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.intro-logo {
+  width: 220px;
+  height: 100px;
+}
+
+.intro-subtitle {
+  font-size: 1.2rem;
+  color: #1E3A5F;
+  margin-bottom: 2rem;
+}
+
+.translate-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 3.5rem;
+  background-color: #34495e;
+  color: #C1E6EB;
+  border: none;
+  border-radius: 25px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.2s;
+}
+
+.translate-button:hover {
+  background-color: #34495e;
+  transform: translateY(-2px);
+}
+
+/* How it Works Section */
+.how-it-works {
+  background-color: white;
+  padding: 4rem 2rem;
+  text-align: center;
+}
+
+.section-title {
+  font-size: 2rem;
+  color: #2c3e50;
+  margin-bottom: 3rem;
+  text-align: center;
+}
+
+.getting-started h4 {
+  font-size: 1rem;
+  color: #777777;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 3rem;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.feature-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.feature-icon {
+  font-size: 4rem;
+  color: #000000;
+}
+
+.feature-card h3 {
+  font-size: 1.1rem;
+  color: #2c3e50;
+  font-weight: 600;
+}
+
+/* Getting Started Section */
+.getting-started {
+  background-color: #ffffff;
+  padding: 4rem 2rem;
+}
+
+.steps-container {
+  max-width: 1000px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.step {
+  background-color: #E9F6FA;
+  padding: 2rem;
+  border-radius: 12px;
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.step-number {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  background-color: #34495e;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.step h3 {
+  font-size: 1.3rem;
+  color: #2c3e50;
+  margin-bottom: 0.5rem;
+}
+
+.step p {
+  font-size: 1rem;
+  line-height: 1.7;
+  color: #555;
+}
+
+/* Trust Section */.trust-section {
+  background-color: #C1E6EB;
+  padding: 4rem 2rem;
+  text-align: center;
+}
+
+.trust-title {
+  font-size: 2rem;
+  color: #1E3A5F;
+  margin-bottom: 1rem;
+  max-width: 800px;
+  margin-left: auto;
+  margin-right: auto;
+  font-weight: 600;
+}
+
+.trust-subtitle {
+  font-size: 0.95rem;
+  color: #1E3A5F;
+  margin-bottom: 3rem;
+  max-width: 700px;
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.6;
+}
+
+.trust-features {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4rem;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.trust-feature {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.trust-icon {
+  font-size: 7rem;
+  color: #1E3A5F;
+  margin-bottom: 0.5rem;
+}
+
+.trust-feature h3 {
+  font-size: 1rem;
+  color: #1E3A5F;
+  font-weight: 500;
+  line-height: 1.4;
+  max-width: 250px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .hero-title {
+    font-size: 2.2rem;
+  }
+
+  .features-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 2rem;
+  }
+
+  .step {
+    flex-direction: column;
+    text-align: center;
+    align-items: center;
+  }
+
+  .trust-features {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero-title {
+    font-size: 1.8rem;
+  }
+
+  .features-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,38 +1,46 @@
-import React, { useState } from 'react';
-import HomePage from './pages/HomePage';
-import Header from './components/Header'
-import TranslationPage from './pages/TranslationPage';
-import './styles/index.css';
-import Footer from './components/footer';
+"use client"
+
+import { useState } from "react"
+import HomePage from "./pages/HomePage"
+import Header from "./components/Header"
+import TranslationPage from "./pages/TranslationPage"
+import About from "./pages/About"
+import Contact from "./pages/Contact"
+import FAQ from "./pages/FAQ"
+import "./styles/index.css"
+import Footer from "./components/footer"
 
 function App() {
-    const [currentPage, setCurrentPage] = useState('home');
+  const [currentPage, setCurrentPage] = useState("home")
 
-    const renderPage = () => {
-        switch (currentPage) {
-            case 'home':
-                return <HomePage onNavigate={handleNavigate} />;
-            case 'translate':
-                return <TranslationPage onNavigate={handleNavigate} />;
-            default:
-                return <HomePage />;
-        }
-    };
+  const renderPage = () => {
+    switch (currentPage) {
+      case "home":
+        return <HomePage onNavigate={handleNavigate} />
+      case "translate":
+        return <TranslationPage onNavigate={handleNavigate} />
+      case "about":
+        return <About />
+      case "contact":
+        return <Contact />
+      case "faq":
+        return <FAQ />
+      default:
+        return <HomePage onNavigate={handleNavigate} />
+    }
+  }
 
-    const handleNavigate = (pageName) => {
-        setCurrentPage(pageName);
-    };
+  const handleNavigate = (pageName) => {
+    setCurrentPage(pageName)
+  }
 
-    return (
-        <div className="app">
-            <Header />
-            <main className="main-content">
-                {renderPage()}
-            </main>
-            <Footer />
-        </div>
-    );
+  return (
+    <div className="app">
+      <Header onNavigate={handleNavigate} currentPage={currentPage} />
+      <main className="main-content">{renderPage()}</main>
+      <Footer />
+    </div>
+  )
 }
 
-export default App;
-
+export default App

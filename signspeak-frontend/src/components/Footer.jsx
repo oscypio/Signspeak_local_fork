@@ -4,6 +4,8 @@ import { FaFacebook, FaLinkedin, FaYoutube, FaInstagram } from "react-icons/fa";
 
 
 const Footer = () => {
+  
+  const currentYear = new Date().getFullYear();
     
   return (
     <footer className="footer">
@@ -42,7 +44,7 @@ const Footer = () => {
           </div>
         </div>
         <div className="footer-bottom">
-          <p>&copy; 2025 SignSpeak. All rights reserved.</p>
+          <p>&copy; {currentYear} SignSpeak. All rights reserved.</p>
         </div>
       </div>
     </footer>
