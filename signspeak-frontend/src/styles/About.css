@@ -1,0 +1,197 @@
+.about-page {
+  width: 100%;
+  min-height: 100vh;
+  background: white;
+}
+
+.about-section {
+  background: white;
+  padding: 4rem 2rem;
+}
+
+.about-section > div {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 4rem;
+}
+
+.text-section {
+  flex: 0 0 55%;
+  text-align: left;
+}
+
+.text-section h1 {
+  font-size: 3rem;
+  font-weight: 700;
+  margin-bottom: 2rem;
+  color: #1E3A5F;
+}
+
+.about-text {
+  font-size: 1rem;
+  line-height: 1.8;
+  color: #1E3A5F;
+}
+
+.imagine-container {
+  flex: 0 0 45%;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.About-us-image {
+  width: 100%;
+  max-width: 450px;
+  height: auto;
+  object-fit: contain;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Adding team section styles */
+.team-section {
+  background: #C1E6EB;
+  padding: 4rem 2rem;
+}
+
+.team-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.team-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #1E3A5F;
+  margin-bottom: 3rem;
+  text-align: left;
+}
+
+.team-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2rem;
+}
+
+.team-card {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.team-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.team-avatar {
+  width: 80px;
+  height: 80px;
+  background: #1E3A5F;
+  border-radius: 50%;
+  margin: 0 auto 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.team-avatar svg {
+  width: 48px;
+  height: 48px;
+}
+
+.member-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #1E3A5F;
+  margin-bottom: 0.5rem;
+}
+
+.member-role {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #1E3A5F;
+  margin-bottom: 1rem;
+}
+
+.member-description {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: #1E3A5F;
+  opacity: 0.8;
+}
+
+/* Ajustando el layout para pantallas medianas - reduce gap y padding */
+@media (max-width: 1024px) {
+  .about-section > div {
+    gap: 2rem;
+  }
+  
+  .about-section {
+    padding: 3rem 1.5rem;
+  }
+
+  /* Adjust team grid for medium screens */
+  .team-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .about-section > div {
+    gap: 1.5rem;
+  }
+  
+  .text-section h1 {
+    font-size: 2.5rem;
+  }
+  
+  .about-text {
+    font-size: 0.95rem;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Single column team grid on tablets */
+  .team-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .team-title {
+    font-size: 2rem;
+  }
+}
+
+/* Solo cambia a columnas verticales en móviles pequeños (menos de 600px) */
+@media (max-width: 600px) {
+  .about-section > div {
+    flex-direction: column;
+  }
+
+  .text-section {
+    flex: 1 1 auto;
+  }
+
+  .imagine-container {
+    flex: 1 1 auto;
+  }
+
+  .text-section h1 {
+    font-size: 2rem;
+  }
+
+  .About-us-image {
+    max-width: 100%;
+  }
+
+  .team-section {
+    padding: 3rem 1.5rem;
+  }
+}
