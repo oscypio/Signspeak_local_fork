@@ -1,0 +1,154 @@
+/* CONTACT PAGE */
+.contact-page {
+    width: 100%;
+    background: white;
+}
+
+/* MAIN CONTENT */
+.contact-section {
+    display: flex;
+    justify-content: center;
+    padding: 6rem 2rem 4rem;
+}
+
+.contact-section > div {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: flex-start;
+    gap: 4rem;
+}
+
+/* LEFT: TEXT */
+.text-section {
+    flex: 0 0 40%;
+    min-width: 340px;
+}
+
+.text-section h1 {
+    font-size: 2.7rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    color: #1e3a5f;
+}
+
+.contact-text {
+    font-size: 1.05rem;
+    line-height: 1.6;
+    color: #1e3a5f;
+    max-width: 460px;
+}
+
+/* FORM */
+.form-section {
+    flex: 1;
+    max-width: 700px;
+    min-width: 380px;
+    background: #C1E6EB;
+    padding: 2.2rem;
+    border-radius: 12px;
+}
+
+.contact-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.3rem;
+}
+
+.form-row {
+    display: flex;
+    gap: 1rem;
+}
+
+.form-group {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #1e3a5f;
+}
+
+input,
+textarea {
+    padding: 0.8rem;
+    border-radius: 8px;
+    border: 1px solid #d1e9e6;
+    background: white;
+    color: #1e3a5f;
+    font-size: 0.9rem;
+    width: 100%;
+}
+
+textarea {
+    resize: none;
+    height: 120px;
+}
+
+/* BUTTON */
+.submit-btn {
+    background: #1e3a5f;
+    color: white;
+    font-weight: 600;
+    font-size: 1rem;
+    border: none;
+    border-radius: 8px;
+    padding: 1rem;
+    cursor: pointer;
+    transition: 0.2s ease-in-out;
+}
+
+.submit-btn:hover {
+    transform: translateY(-2px);
+    opacity: 0.9;
+}
+
+/* SUCCESS MESSAGE */
+.success-message {
+    color: #1e3a5f;
+    font-weight: 600;
+    text-align: center;
+}
+
+/* Medium screens: adjust proportions */
+@media (max-width: 1000px) {
+  .contact-section > div {
+    gap: 1.5rem;
+  }
+
+  .text-section {
+    flex: 0 0 50%;
+  }
+
+  .form-section {
+    flex: 0 0 50%;
+    min-width: 340px;
+  }
+}
+
+/* If two columns no longer fit → switch to a single column */
+@media (max-width: 800px) {
+  .contact-section > div {
+    flex-direction: column;
+    align-items: center;
+    text-align: left;
+  }
+
+  .text-section,
+  .form-section {
+    width: 100%;
+    max-width: 600px;
+    flex: unset;
+  }
+}
+
+/* Small mobile: stack inputs in a column */
+@media (max-width: 500px) {
+  .form-row {
+    flex-direction: column;
+  }
+}
