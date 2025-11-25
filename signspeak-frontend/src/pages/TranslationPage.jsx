@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import "../styles/TranslationPage.css";
 
 import { getWebcamStream } from '../services/WebcamCaptureService';
 import { MediaPipeService } from '../services/MediaPipeService';
@@ -6,6 +7,11 @@ import { WebSocketManager } from '../services/WebSocketManager';
 import ControlPanel from '../components/ControlPanel';
 import VideoDisplay from '../components/VideoDisplay';
 import TextDisplay from '../components/TextDisplay';
+import { HiMiniSpeakerWave } from "react-icons/hi2";
+import { FaEdit } from "react-icons/fa";
+import { MdOutlineTextIncrease, MdOutlineTextDecrease } from "react-icons/md";
+
+
 
 function TranslationPage() {
 
@@ -136,8 +142,25 @@ function TranslationPage() {
         handleBackendMessage(mockMessage);
     };
 
+    /**
+     * add new states for buttons: increase/decrease text size, read aloud, edit text
+     */
+    const [fontSize, setFontSize] = useState(18);
+    const [isEditable, setIsEditable] = useState(false);
+
+    /**
+     * edit size functions
+     */
+    const increaseFont = () => setFontSize((s) => s + 2);
+    const decreaseFont = () => setFontSize((s) => Math.max(12, fontSize - 2));
+
+    /**
+     * Edit text function
+     */
+    const textEdit = () => setIsEditable((prev) => !prev);
+
     return (
-        <main className="main-content">
+        <main className="translation-content">
 
             <section className="video-section">
                 <VideoDisplay
@@ -152,7 +175,28 @@ function TranslationPage() {
                 />
             </section>
 
-            <TextDisplay text={translatedText} />
+            <section className="translation-section">
+                <div className="translation-box">
+                    <div
+                        className="result-text"
+                        contentEditable={isEditable}
+                        suppressContentEditableWarning={true}
+                        style={{ fontSize: `${fontSize}px` }}
+                        onInput={(e) => setTranslatedText(e.target.textContent)}
+                    >
+                        {translatedText || ""}
+                    </div>
+
+                    {/* Botones inferiores */}
+                    <div className="translation-actions">
+                        <button className="translated-text"><HiMiniSpeakerWave /></button>
+                        <button className="increase-font" onClick={increaseFont}><MdOutlineTextIncrease /></button>
+                        <button className="decrease-font" onClick={decreaseFont}><MdOutlineTextDecrease /></button>
+                        <button className="text-edit" onClick={textEdit}><FaEdit /></button>
+                    </div>
+                </div>
+            </section>
+
 
             <button onClick={simulateReceive} style={{marginTop: '1rem'}}>
                 Simulate Backend Message

@@ -1,0 +1,146 @@
+body {
+    background-color: #ffffff;
+    margin: 0;
+    font-family: "Inter", sans-serif;
+}
+
+.translation-content {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 2rem;
+    padding: 2rem 3rem;
+    min-height: 75vh;
+    background-color: #ffffff;
+}
+
+/* LEFT SECTION (VIDEO + BUTTON) */
+.video-section {
+    flex: 1 1 400px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.video-section video,
+.video-placeholder {
+    width: 100%;
+    max-width: 600px;
+    height: auto;
+    aspect-ratio: 16/9;
+    background-color: black;
+    border-radius: 6px;
+    object-fit: cover;
+}
+
+.start-btn {
+    background-color: #183651;
+    color: #fff;
+    padding: 0.9rem 3.5rem;
+    font-size: 1.3rem;
+    border-radius: 15px;
+    border: none;
+    margin-top: 1.7rem;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.start-btn:hover {
+    opacity: 0.9;
+}
+
+.control-panel {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+.control-panel button:hover {
+    opacity: 0.9;
+}
+
+/* RIGHT SECTION (TEXT BOX) */
+.translation-section {
+    width: 40%;
+    display: flex;
+    justify-content: center;
+}
+
+.translation-box {
+    width: 100%;
+    background-color: #c7e8ef;
+    padding: 1.5rem 1.3rem;
+    border-radius: 14px;
+    display: flex;
+    flex-direction: column;
+}
+
+.result-text {
+    min-height: 240px;
+    background-color: #e8f8fb;
+    border-radius: 14px;
+    padding: 1rem;
+    font-size: 1.1rem;
+    color: #0d2538;
+}
+
+/* BUTTONS BELOW TEXT BOX */
+.translation-actions {
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
+    margin-top: 1.2rem;
+    padding: 0 0.4rem;
+}
+
+.translated-text, 
+.increase-font, 
+.decrease-font, 
+.text-edit {
+    width: 55px;
+    height: 55px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: #0d2538;
+    font-size: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.icon-button:hover {
+    opacity: 0.7;
+    transform: scale(1.05);
+    transition: 0.15s ease;
+}
+
+@media (max-width: 900px) {
+    .translation-content {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .video-section, .translation-section {
+        width: 90%;
+        max-width: 600px;
+    }
+
+    .translation-actions {
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+}
+
+@media (max-width: 500px) {
+    .result-text {
+        font-size: 1rem;
+        min-height: 180px;
+    }
+
+    .translated-text, .increase-font, .decrease-font, .text-edit {
+        width: 45px;
+        height: 45px;
+        font-size: 1.5rem;
+    }
+}

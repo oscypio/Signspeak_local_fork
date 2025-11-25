@@ -13,8 +13,8 @@ function ControlPanel({ onClick, isWebcamOn, status }) {
     const isDisabled = (status === 'CONNECTING' || status === 'PROCESSING');
 
     return (
-        <div>
-            <button onClick={onClick} disabled={isDisabled}>
+        <div className="control-panel">
+            <button className="start-btn" onClick={onClick} disabled={isDisabled}>
                 {buttonText}
             </button>
         </div>
