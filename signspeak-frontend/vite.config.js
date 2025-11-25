@@ -6,5 +6,13 @@ export default defineConfig({
   plugins: [react()],
     define:{
       'global': 'window',
+    },
+    server: {
+        watch: {
+            usePolling: true,
+        },
+        host: true,
+        strictPort: true,
+        port: 5173,
     }
 })
