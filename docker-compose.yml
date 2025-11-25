@@ -2,6 +2,21 @@ version: '3.8'
 
 services:
 
+  signspeak-ml:
+    build:
+      context: ./SignSpeak-ML
+      dockerfile: Dockerfile
+    container_name: signspeak-ml
+    env_file:
+      - ./SignSpeak-ML/.env
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./SignSpeak-ML/app:/app/app
+      - ./SignSpeak-ML/app_models:/app/app_models
+
   signspeak-backend:
     build:
       context: ./SignSpeakBackend
