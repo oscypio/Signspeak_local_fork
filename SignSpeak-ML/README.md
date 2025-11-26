@@ -287,33 +287,36 @@ app_models/qwen2.5-1.5b-instruct-q4_k_m.gguf
 
 Right now this app is in its **development** phase - the vocabulary is very limited:
 
-Current state (when using conf(large).pt):
+Current state (when using conf_final_v3.pt):
 
 | Metric    | Value      |
-| --------- |------------|
-| Accuracy  | **82.42%** |
-| Avg Loss  | **0.6356** |
-| Macro F1  | **0.786**  |
-| Precision | **0.823**  |
-| Recall    | **0.800**  |
+| --------- | ---------- |
+| Accuracy  | **87.01%** |
+| Avg Loss  | **0.3814** |
+| Macro F1  | **0.869**  |
+| Precision | **0.887**  |
+| Recall    | **0.868**  |
+
 
 Glossary:
 
 | Class     | Precision | Recall | F1-score |
 | --------- | --------- | ------ | -------- |
-| BAD       | 0.800     | 0.800  | 0.800    |
-| GOOD      | 1.000     | 0.200  | 0.333    |
-| HELLO     | 0.857     | 1.000  | 0.923    |
-| HOW       | 1.000     | 1.000  | 1.000    |
-| LUNCH     | 0.800     | 0.800  | 0.800    |
-| MUCH      | 0.571     | 0.800  | 0.667    |
-| NEED      | 1.000     | 1.000  | 1.000    |
-| PHONE     | 0.833     | 1.000  | 0.909    |
+| DRINK     | 0.857     | 0.750  | 0.800    |
+| HELLO     | 1.000     | 1.000  | 1.000    |
+| HELP      | 1.000     | 1.000  | 1.000    |
+| HOW       | 0.833     | 1.000  | 0.909    |
+| LUNCH     | 0.571     | 0.800  | 0.667    |
+| MUCH      | 0.667     | 0.800  | 0.727    |
+| NEED      | 1.000     | 0.750  | 0.857    |
+| PHONE     | 0.800     | 0.800  | 0.800    |
 | PLEASE    | 0.833     | 1.000  | 0.909    |
 | PUSH      | 1.000     | 1.000  | 1.000    |
-| THANK YOU | 0.400     | 0.400  | 0.400    |
-| WAIT      | 1.000     | 0.600  | 0.750    |
-| WANT      | 0.600     | 0.600  | 0.600    |
+| SORRY     | 0.857     | 0.857  | 0.857    |
+| THANK YOU | 1.000     | 0.800  | 0.889    |
+| WAIT      | 1.000     | 1.000  | 1.000    |
+| WANT      | 1.000     | 0.600  | 0.750    |
+
 
 Additionally, current **Segmenter** is based on holistics and best fitting parameters for current dataset.
 It may generate some additional loss because of that. To disable it, simply put `USE_SEGMENTATOR` to `False` in .env file.
