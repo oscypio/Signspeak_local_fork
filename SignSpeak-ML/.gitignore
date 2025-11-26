@@ -1,0 +1,4 @@
+app_models/*
+!app_models/__init__.py
+!app_models/conf_final_v3.pt
+
