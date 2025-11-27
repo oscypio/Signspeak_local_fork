@@ -23,12 +23,12 @@
 }
 
 .intro-logo {
-  width: 220px;
+  width: 240px;
   height: 100px;
 }
 
 .intro-subtitle {
-  font-size: 1.2rem;
+  font-size: 1.3rem;
   color: #1E3A5F;
   margin-bottom: 2rem;
 }
@@ -42,7 +42,7 @@
   color: #C1E6EB;
   border: none;
   border-radius: 25px;
-  font-size: 12px;
+  font-size: 1.1rem;
   font-weight: 600;
   cursor: pointer;
   transition: background-color 0.3s, transform 0.2s;

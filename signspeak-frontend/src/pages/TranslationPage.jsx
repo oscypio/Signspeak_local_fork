@@ -4,44 +4,31 @@ import "../styles/TranslationPage.css";
 import { getWebcamStream } from '../services/WebcamCaptureService';
 import { MediaPipeService } from '../services/MediaPipeService';
 import { WebSocketManager } from '../services/WebSocketManager';
-import ControlPanel from '../components/ControlPanel'; // Nota: ControlPanel contiene il tasto Start
+import ControlPanel from '../components/ControlPanel'; // Note: ControlPanel contains the Start button
 import VideoDisplay from '../components/VideoDisplay';
 
-// Icone
 import { HiMiniSpeakerWave } from "react-icons/hi2";
-import { FaEdit } from "react-icons/fa";
 import { MdOutlineTextIncrease, MdOutlineTextDecrease } from "react-icons/md";
 import { FiSettings, FiX } from "react-icons/fi";
 
-// =========================================================================
-// === VALIDAZIONE GOOGLE MEET ===
-// =========================================================================
 
 const validateAndExtractMeetingId = (input) => {
     if (!input) return null;
     const cleanInput = input.trim().toLowerCase();
 
-    // Pattern esatto: 3 lettere - 4 lettere - 3 lettere (es. pzo-fddt-emi)
     const idPattern = /[a-z]{3}-[a-z]{4}-[a-z]{3}/;
 
-    // Caso 1: Link intero
     if (cleanInput.includes('meet.google.com/')) {
         const match = cleanInput.match(/meet\.google\.com\/([a-z]{3}-[a-z]{4}-[a-z]{3})/);
         return match ? match[1] : null;
     }
 
-    // Caso 2: Solo ID
     if (cleanInput.length === 12 && idPattern.test(cleanInput)) {
         return cleanInput;
     }
 
     return null;
 };
-
-
-// =========================================================================
-// === STILI E COMPONENTI PER IL MODALE E PIP ===
-// =========================================================================
 
 const modalOverlayStyle = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100 };
 const modalContentStyle = { backgroundColor: 'white', padding: '25px', borderRadius: '8px', boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)', width: '400px' };
@@ -50,7 +37,7 @@ const labelStyle = { fontSize: '14px', display: 'block', marginBottom: '5px', co
 const submitButtonStyle = { padding: '10px 15px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', width: '100%' };
 const closeButtonStyle = { background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#aaa' };
 
-// Componente Modale
+// Modal Component
 const GoogleMeetConfigModal = ({ currentMeetingId, currentUserStatus, onSubmit, onClose }) => {
     const [tempMeetingId, setTempMeetingId] = useState(currentMeetingId);
     const [tempUserStatus, setTempUserStatus] = useState(currentUserStatus);
@@ -58,7 +45,7 @@ const GoogleMeetConfigModal = ({ currentMeetingId, currentUserStatus, onSubmit, 
     const handleSubmit = () => {
         const validId = validateAndExtractMeetingId(tempMeetingId);
         if (!validId) {
-            alert("Per favore inserisci un link Google Meet valido (https://meet.google.com/...) oppure un ID nel formato 'xxx-xxxx-xxx'.");
+            alert("Please enter a valid Google Meet link (https://meet.google.com/...) or an ID in the format 'xxx-xxxx-xxx'.");
             return;
         }
         onSubmit(validId, tempUserStatus);
@@ -73,15 +60,15 @@ const GoogleMeetConfigModal = ({ currentMeetingId, currentUserStatus, onSubmit, 
                     <button onClick={onClose} style={closeButtonStyle}><FiX /></button>
                 </div>
                 <div style={{ marginBottom: '15px' }}>
-                    <label style={labelStyle}>Meeting Link/ID (Obbligatorio per PiP):</label>
+                    <label style={labelStyle}>Meeting Link/ID (Required for PiP):</label>
                     <input
                         type="text"
-                        placeholder="Es. https://meet.google.com/abc-defg-hij"
+                        placeholder="Ex. https://meet.google.com/abc-defg-hij"
                         value={tempMeetingId}
                         onChange={(e) => setTempMeetingId(e.target.value)}
                         style={inputStyle}
                     />
-                    <p style={{fontSize: '11px', color: '#888', marginTop: '4px'}}>Accetta link completi o solo l'ID (es. abc-defg-hij)</p>
+                    <p style={{fontSize: '11px', color: '#888', marginTop: '4px'}}>Accepts full links or just the ID (e.g. abc-defg-hij)</p>
                 </div>
                 <div style={{ marginBottom: '20px' }}>
                     <label style={labelStyle}>My Status:</label>
@@ -96,7 +83,6 @@ const GoogleMeetConfigModal = ({ currentMeetingId, currentUserStatus, onSubmit, 
     );
 };
 
-// CSS PiP (Stile Figma)
 const getPipStyles = () => `
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
@@ -138,11 +124,6 @@ const getPipStyles = () => `
     .pip-status-bar { color: #666; margin-bottom: 10px; font-weight: 500; text-align: center; }
 `;
 
-
-// =========================================================================
-// === COMPONENTE PRINCIPALE ===
-// =========================================================================
-
 function TranslationPage() {
 
     const [mediaStream, setMediaStream] = useState(null);
@@ -161,9 +142,6 @@ function TranslationPage() {
     const [isPiP, setIsPiP] = useState(false);
     const pipWindowRef = useRef(null);
 
-    // ---------------------------------------------
-    // LOGICA ORIGINALE
-    // ---------------------------------------------
     const handleBackendMessage = (message) => {
         if (message && typeof message === 'string' && message.trim().startsWith('{')) {
             try {
@@ -264,15 +242,9 @@ function TranslationPage() {
         }
     };
 
-
-    // ---------------------------------------------
-    // NUOVA LOGICA PIP
-    // ---------------------------------------------
-
-    // 1. Enter PiP
     const enterPiP = async (targetMeetingId, targetUserStatus) => {
         if (!('documentPictureInPicture' in window)) {
-            alert("Il tuo browser non supporta il PiP API.");
+            alert("Your browser does not support the PiP API.");
             return;
         }
 
@@ -301,7 +273,7 @@ function TranslationPage() {
             const container = newPipWindow.document.createElement('div');
             container.className = 'pip-container';
 
-            // ICONE SVG
+            // SVG ICONS
             const iconSpeaker = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M13.5 4.06c0-1.336-1.616-2.005-2.56-1.06l-4.5 4.5H4.508c-1.141 0-2.318.664-2.66 1.905A9.76 9.76 0 001.5 12c0 .898.121 1.768.35 2.595.341 1.24 1.518 1.905 2.659 1.905h1.93l4.5 4.5c.945.945 2.561.276 2.561-1.06V4.06zM18.584 9a.75.75 0 01.724 1.06 3.5 3.5 0 000 3.88.75.75 0 11-1.372.612 5 5 0 010-5.164A.75.75 0 0118.584 9z" /></svg>`;
             const iconPlus = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5.625 18.75h12.75V17.5h-12.75v1.25Zm6.65-4.575L14.75 9.7l2.475 4.475h1.45l-3.2-5.75h-1.45l-3.2 5.75h1.45Zm-7.9 0L6.85 5.5l2.475 8.675h1.45l-3.2-11.2h-1.45L2.925 14.175h1.45Zm5.975-6.525L11.5 10.95h2.1L12.55 7.65h-2.2ZM6.125 8.925l1.075 3.85h-2.15l1.075-3.85Z" /></svg>`;
             const iconMinus = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5.625 18.75h12.75V17.5h-12.75v1.25Zm6.65-4.575L14.75 9.7l2.475 4.475h1.45l-3.2-5.75h-1.45l-3.2 5.75h1.45Zm-7.9 0L6.85 5.5l2.475 8.675h1.45l-3.2-11.2h-1.45L2.925 14.175h1.45Zm5.975-6.525L11.5 10.95h2.1L12.55 7.65h-2.2ZM6.125 8.925l1.075 3.85h-2.15l1.075-3.85Z" /></svg>`;
@@ -361,18 +333,12 @@ function TranslationPage() {
         }
     };
 
-    // 2. Submit Config
     const handleConfigSubmit = (newMeetingId, newUserStatus) => {
         setMeetingId(newMeetingId);
         setUserStatus(newUserStatus);
         if (isWebcamOn) handleStop();
         enterPiP(newMeetingId, newUserStatus);
     };
-
-
-    // ---------------------------------------------
-    // SYNC EFFECTS
-    // ---------------------------------------------
 
     useEffect(() => {
         if (pipWindowRef.current && userStatus === 'DEAF' && mediaStream) {
@@ -413,14 +379,10 @@ function TranslationPage() {
         }
     }, [status, isWebcamOn, isPiP]);
 
-
-    // ---------------------------------------------
-    // RENDER PRINCIPALE
-    // ---------------------------------------------
     return (
         <main className="translation-content">
 
-            {/* MODALE DI CONFIGURAZIONE (Invisibile fino all'attivazione) */}
+            {/* CONFIGURATION MODAL (Invisible until activated) */}
             {showModal && (
                 <GoogleMeetConfigModal
                     currentMeetingId={meetingId}
@@ -430,7 +392,7 @@ function TranslationPage() {
                 />
             )}
 
-            {/* SEZIONE VIDEO (SINISTRA) */}
+            {/* VIDEO SECTION (LEFT) */}
             <section className="video-section">
                 <VideoDisplay
                     ref={videoRef}
@@ -438,7 +400,7 @@ function TranslationPage() {
                     stream={mediaStream}
                 />
 
-                {/* --- BOTTONI START E PIP SETUP ALLINEATI --- */}
+                {/* --- START AND PIP SETUP BUTTONS ALIGNED --- */}
                 <div className="buttons-container">
                     <ControlPanel
                         onClick={toggleWebcam}
@@ -455,7 +417,7 @@ function TranslationPage() {
                 </div>
             </section>
 
-            {/* SEZIONE TRADUZIONE (DESTRA) */}
+            {/* TRANSLATION SECTION (RIGHT) */}
             <section className="translation-section">
                 <div className="translation-box">
                     <div

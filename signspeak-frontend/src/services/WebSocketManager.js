@@ -16,7 +16,6 @@ export class WebSocketManager {
         const { onOpen = () => {}, onMessage = () => {}, onError = () => {}, onClose = () => {} } = callbacks;
 
         try {
-            // Nota: Per il deploy, assicurati che questo URL non sia hardcodato su localhost
             const socket = new SockJS('http://localhost:8080/ws');
 
             socket.onclose = (event) => {
@@ -32,9 +31,9 @@ export class WebSocketManager {
             this.stompClient = new Client({
                 webSocketFactory: () => socket,
                 debug: (str) => {
-                    // console.log('STOMP: ' + str); // Decommenta per debug profondo
+                    console.log('STOMP: ' + str);
                 },
-                reconnectDelay: 5000, // È meglio avere un riconnessione automatica
+                reconnectDelay: 5000,
                 heartbeatIncoming: 4000,
                 heartbeatOutgoing: 4000,
             });
@@ -43,13 +42,10 @@ export class WebSocketManager {
                 console.log('STOMP: Connected to WebSocket');
                 onOpen();
 
-                // 1. Definisci il topic dinamico basato sull'ID del meeting
-                // Assicurati che il backend supporti questo pattern di URL
                 const subscriptionTopic = `/topic/meeting/${meetingId}`;
 
                 console.log(`STOMP: Subscribing to: ${subscriptionTopic}`);
 
-                // 2. CORREZIONE: Usa la variabile subscriptionTopic qui!
                 this.stompClient.subscribe(subscriptionTopic, (message) => {
                     console.log('STOMP: Message received from topic:', subscriptionTopic);
                     onMessage(message.body);
@@ -79,7 +75,6 @@ export class WebSocketManager {
      */
     sendHandData(results, timestamp, userInfo) {
         if (!this.stompClient || !this.stompClient.connected) {
-            // console.warn("STOMP client is not connected."); // Evita spam in console se disconnesso
             return;
         }
 
@@ -87,12 +82,9 @@ export class WebSocketManager {
             timestamp: timestamp,
             landmarks: results.landmarks,
             handedness: results.handedness,
-            // Importante: userInfo contiene meetingId e userStatus (DEAF/NORMAL)
             userInfo: userInfo
         };
 
-        // Invia i dati al backend.
-        // Il backend leggerà userInfo.meetingId per sapere su quale topic rispedire la risposta.
         this.stompClient.publish({
             destination: '/app/frame',
             body: JSON.stringify(dataPacket)
