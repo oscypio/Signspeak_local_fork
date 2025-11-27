@@ -1,3 +1,5 @@
+/* TranslationPage.css - Figma Style Buttons (Distinct Colors) */
+
 body {
     background-color: #ffffff;
     margin: 0;
@@ -8,94 +10,141 @@ body {
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
-    gap: 2rem;
-    padding: 2rem 3rem;
+    align-items: flex-start;
+    gap: 4rem;
+    padding: 2rem 5%;
     min-height: 75vh;
     background-color: #ffffff;
 }
 
-/* LEFT SECTION (VIDEO + BUTTON) */
+/* LEFT SECTION (VIDEO + BUTTONS) */
 .video-section {
-    flex: 1 1 400px;
+    flex: 1 1 500px;
+    max-width: 750px;
     display: flex;
     flex-direction: column;
     align-items: center;
+    width: 100%;
 }
 
+/* VIDEO */
 .video-section video,
 .video-placeholder {
     width: 100%;
-    max-width: 600px;
     height: auto;
     aspect-ratio: 16/9;
-    background-color: black;
-    border-radius: 6px;
+    background-color: #1a1a1a;
+    border-radius: 8px;
     object-fit: cover;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
 }
 
+/* --- CONTENITORE BOTTONI --- */
+.buttons-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1.5rem; /* Spazio tra i bottoni */
+    width: 100%;
+    margin-top: 2rem;
+}
+
+/* Control Panel Wrapper (per il tasto Start) */
+.control-panel {
+    display: contents; /* Fa sì che il div sparisca e il bottone sia figlio diretto del container */
+}
+
+/* --- STILE CONDIVISO PER I BOTTONI (Forma e Dimensione) --- */
+.start-btn,
+.setup-pip-btn {
+    flex: 1; /* Si allargano equamente */
+    max-width: 220px; /* Larghezza massima per non diventare enormi */
+    min-width: 160px; /* Larghezza minima per non rompersi */
+    height: 55px; /* Altezza identica */
+    border-radius: 30px; /* Bordo molto arrotondato (Pillola) come Figma */
+    border: none;
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.1s, opacity 0.2s;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+/* --- COLORI SPECIFICI (Diversi come richiesto) --- */
+
+/* 1. Start Button (Blu Scuro) */
 .start-btn {
     background-color: #183651;
     color: #fff;
-    padding: 0.9rem 3.5rem;
-    font-size: 1.3rem;
-    border-radius: 15px;
-    border: none;
-    margin-top: 1.7rem;
-    cursor: pointer;
-    font-weight: 500;
 }
-
 .start-btn:hover {
-    opacity: 0.9;
+    background-color: #2a4a6a;
 }
 
-.control-panel {
-    display: flex;
-    justify-content: center;
-    width: 100%;
+/* 2. Setup PiP Button (Arancione/Giallo) */
+.setup-pip-btn {
+    background-color: #f59e0b; /* Colore diverso per distinzione */
+    color: #fff;
+}
+.setup-pip-btn:hover {
+    background-color: #d97706;
 }
 
-.control-panel button:hover {
-    opacity: 0.9;
+/* Effetto Click Comune */
+.start-btn:active,
+.setup-pip-btn:active {
+    transform: scale(0.97);
 }
+
 
 /* RIGHT SECTION (TEXT BOX) */
 .translation-section {
-    width: 40%;
+    flex: 1 1 450px;
+    max-width: 650px;
     display: flex;
     justify-content: center;
+    width: 100%;
 }
 
 .translation-box {
     width: 100%;
+    box-sizing: border-box;
     background-color: #c7e8ef;
-    padding: 1.5rem 1.3rem;
-    border-radius: 14px;
+    padding: 1.8rem;
+    border-radius: 18px;
     display: flex;
     flex-direction: column;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
 }
 
 .result-text {
-    min-height: 240px;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 320px;
+    max-height: 500px;
     background-color: #e8f8fb;
     border-radius: 14px;
-    padding: 1rem;
-    font-size: 1.1rem;
+    padding: 1.5rem;
+    font-size: 1.2rem;
     color: #0d2538;
+    line-height: 1.5;
+    overflow-y: auto;
 }
 
-/* BUTTONS BELOW TEXT BOX */
 .translation-actions {
     display: flex;
     justify-content: space-around;
-    flex-wrap: wrap;
-    margin-top: 1.2rem;
-    padding: 0 0.4rem;
+    align-items: center;
+    margin-top: 1.5rem;
+    padding: 0 1rem;
 }
 
-.translated-text, 
-.increase-font, 
-.decrease-font, 
+.translated-text,
+.increase-font,
+.decrease-font,
 .text-edit {
     width: 55px;
     height: 55px;
@@ -103,44 +152,59 @@ body {
     background: transparent;
     cursor: pointer;
     color: #0d2538;
-    font-size: 2rem;
+    font-size: 2.2rem;
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: transform 0.2s, color 0.2s;
 }
 
-.icon-button:hover {
-    opacity: 0.7;
-    transform: scale(1.05);
-    transition: 0.15s ease;
+.translated-text:hover,
+.increase-font:hover,
+.decrease-font:hover,
+.text-edit:hover {
+    transform: scale(1.1);
+    color: #183651;
 }
 
-@media (max-width: 900px) {
+/* RESPONSIVE */
+@media (max-width: 1100px) {
     .translation-content {
         flex-direction: column;
         align-items: center;
+        gap: 3rem;
     }
 
-    .video-section, .translation-section {
-        width: 90%;
-        max-width: 600px;
+    .video-section,
+    .translation-section {
+        flex: 0 0 auto;
+        width: 100%;
+        max-width: 650px;
     }
 
-    .translation-actions {
-        justify-content: space-between;
-        gap: 0.5rem;
+    .result-text {
+        min-height: 250px;
     }
 }
 
 @media (max-width: 500px) {
-    .result-text {
-        font-size: 1rem;
-        min-height: 180px;
+    .translation-content {
+        padding: 1rem;
     }
 
-    .translated-text, .increase-font, .decrease-font, .text-edit {
-        width: 45px;
-        height: 45px;
-        font-size: 1.5rem;
+    .buttons-container {
+        flex-direction: column; /* Su mobile li impiliamo */
+        width: 100%;
+    }
+
+    .start-btn, .setup-pip-btn {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .result-text {
+        font-size: 1rem;
+        padding: 1rem;
+        min-height: 200px;
     }
 }
