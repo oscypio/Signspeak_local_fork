@@ -110,3 +110,114 @@ class WordSegmenter:
             return word_frames_np
 
         return None
+
+    def add_frame_with_alternatives(self, frame_vec: np.ndarray):
+        """
+        Backwards-compatible alternative to `add_frame`.
+
+        Behaves like `add_frame`, but when a word boundary is detected returns
+        a list of candidate segments (np.ndarray). The first element is the
+        original segment; following elements are variants produced by
+        shifting start/end within +/- SEGMENTER_MAX_SHIFT_FRAMES (uniformly
+        sampled up to SEGMENTER_ALTERNATIVES_COUNT). Uses settings from
+        app.model_logic.utils.config.
+
+        Returns:
+            None or List[np.ndarray]
+        """
+        from ..utils.config import settings
+
+        # Reuse existing add_frame logic to update state without returning
+        # the segment. We'll replicate detection here to capture indices.
+        if self.prev_frame is None:
+            # initialize same as add_frame
+            self.prev_frame = frame_vec
+            self.buffer.append(frame_vec)
+            return None
+
+        movement = float(np.linalg.norm(frame_vec - self.prev_frame))
+        self.ema_motion = (
+            self.ema_alpha * movement + (1 - self.ema_alpha) * self.ema_motion
+        )
+
+        self.prev_frame = frame_vec
+        self.buffer.append(frame_vec)
+
+        if self.prev_movement > 0 and movement > self.prev_movement * self.burst_multiplier:
+            self.silence_count = 0
+            self.prev_movement = movement
+            return None
+
+        if self.ema_motion < self.motion_threshold:
+            self.silence_count += 1
+        else:
+            self.silence_count = 0
+
+        self.prev_movement = movement
+
+        if self.silence_count >= self.silence_frames:
+
+            word_frames = self.buffer[:-self.silence_frames]
+
+            if len(word_frames) < self.min_word_frames:
+                self.buffer = self.buffer[-self.silence_frames:]
+                return None
+
+            # convert to numpy for slicing
+            word_np = np.array(word_frames, dtype=np.float32)
+
+            # Determine original start/end indices relative to the buffer
+            total_buf = len(self.buffer)
+            orig_end = len(word_frames) - 1
+            orig_start = 0
+
+            max_shift = int(settings.SEGMENTER_MAX_SHIFT_FRAMES)
+            n_variants = int(settings.SEGMENTER_ALTERNATIVES_COUNT)
+
+            variants = []
+            # Always include original
+            variants.append(word_np)
+
+            # Generate shift-based variants: pairs of (start_shift, end_shift)
+            # We'll sample shifts evenly in range [-max_shift, max_shift]
+            if n_variants > 1 and max_shift > 0:
+                # Create candidate shifts (excluding 0,0 which is original)
+                shifts = []
+                step = max(1, max_shift // max(1, n_variants - 1))
+                # generate symmetric shifts for start and end
+                for s in range(step, max_shift + 1, step):
+                    shifts.append((-s, 0))
+                    shifts.append((s, 0))
+                    shifts.append((0, -s))
+                    shifts.append((0, s))
+
+                # Deduplicate and limit
+                seen = set()
+                candidates = []
+                for sh in shifts:
+                    if len(candidates) >= (n_variants - 1):
+                        break
+                    if sh in seen:
+                        continue
+                    seen.add(sh)
+                    candidates.append(sh)
+
+                # Create variants from candidates
+                for (s_shift, e_shift) in candidates:
+                    # Compute new start/end in the original buffer coordinates
+                    # start index relative to word_frames
+                    start_idx = max(0, orig_start + s_shift)
+                    end_idx = min(len(word_frames) - 1, orig_end + e_shift)
+
+                    if end_idx - start_idx + 1 < self.min_word_frames:
+                        continue
+
+                    var_np = np.array(word_frames[start_idx:end_idx + 1], dtype=np.float32)
+                    variants.append(var_np)
+
+            # Reset buffer (keep silence tail)
+            self.buffer = self.buffer[-self.silence_frames:]
+
+            return variants
+
+        return None

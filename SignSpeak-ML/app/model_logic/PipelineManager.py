@@ -6,7 +6,6 @@ from .utils.util_functions import *
 from ..schemas import FrameData
 from .preprocessing.DataPreparer import UnifiedDataPreparer
 from .segmentation.WordSegmenter import WordSegmenter
-from .segmentation.WordSegmenterV2 import WordSegmenterV2
 from .classifier.ASLClassifier import ASLClassifier
 
 
@@ -63,9 +62,15 @@ class PipelineManager:
         if settings.USE_SEGMENTATOR:
 
             for vec in seq:
-                segment = self.segmenter.add_frame(vec)
-                if segment is not None:
-                    segments.append(segment)
+                if settings.SEGMENTER_RETURN_ALTERNATIVES:
+                    segs = self.segmenter.add_frame_with_alternatives(vec)
+                    if segs is not None:
+                        # segs is a list of np.ndarrays (variants for one detected word)
+                        segments.append(segs)
+                else:
+                    segment = self.segmenter.add_frame(vec)
+                    if segment is not None:
+                        segments.append(segment)
 
             if not segments:
                 print("No segments found")
@@ -80,13 +85,24 @@ class PipelineManager:
         # ====================================================
         responses = []
 
-        for segment_np in segments:
+        for segment_item in segments:
 
-            # 1. generate TTA variants
-            tta_variants = self.preparer.prepare_tta_segments(segment_np, n_augs=7)
+            # If using alternative segments, segment_item is list of variants
+            if settings.USE_SEGMENTATOR and settings.SEGMENTER_RETURN_ALTERNATIVES:
 
-            # 2. predict using majority vote
-            word = self.classifier.predict_tta(tta_variants)
+                # Delegate selection of best label to classifier
+                cand_list = [self.preparer.prepare_resampled(cand) for cand in segment_item]
+
+                word = self.classifier.predict_best_from_candidates(cand_list)
+
+            else:
+                segment_np = segment_item
+
+                # 1. generate TTA variants
+                tta_variants = self.preparer.prepare_tta_segments(segment_np, n_augs=7)
+
+                # 2. predict using majority vote
+                word = self.classifier.predict_tta(tta_variants)
 
             # ====================================================
             # 4) Special symbol -> end of sentence

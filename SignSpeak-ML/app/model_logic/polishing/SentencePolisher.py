@@ -51,6 +51,8 @@ class SentencePolisher:
         - Do NOT repeat the input.
         - Remove same words from sentence.
         - Do NOT output anything except the final sentence.
+        - Try to make it sound natural and with sense.
+        - Add punctuation as needed.
         
         ASL gloss: {sentence}
         

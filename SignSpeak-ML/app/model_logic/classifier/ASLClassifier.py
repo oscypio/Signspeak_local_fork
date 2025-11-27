@@ -2,7 +2,7 @@ from collections import Counter
 
 import torch
 import numpy as np
-from typing import Optional, Dict, Any, Type
+from typing import Optional, Dict, Type, cast
 
 from .models.GRUClassifier import GRUClassifier
 from ..utils.config import settings
@@ -93,14 +93,125 @@ class ASLClassifier:
         x = self._prepare_tensor(seq_np)
         with torch.no_grad():
             logits = self.model(x)
-            probs = torch.softmax(logits, dim=1)[0]
+            probs = torch.softmax(logits, dim=1)[0].cpu().numpy()
 
-        return {
-            self.idx_to_class[i]: float(p)
-            for i, p in enumerate(probs)
-        }
+        labels = [self.idx_to_class[int(i)] for i in range(len(probs))]
+        return {label: float(p) for label, p in zip(labels, probs)}
+
+    def predict_proba_batch(self, seq_list: list[np.ndarray]) -> list[Dict[str, float]]:
+        """
+        Batch prediction for multiple sequences.
+
+        Input:
+            seq_list: list of np.ndarray each with shape (T, F)
+        Returns:
+            list of dicts {label:prob} in the same order as input
+        """
+        if not seq_list:
+            return []
+
+        # Prepare a single tensor (N, T, F)
+        tensors = []
+        for seq in seq_list:
+            if not isinstance(seq, np.ndarray):
+                seq = np.array(seq, dtype=np.float32)
+            tensors.append(torch.tensor(seq, dtype=torch.float32))
+
+        # Stack and move to device
+        x = torch.stack(tensors, dim=0).to(self.device)
+
+        with torch.no_grad():
+            logits = self.model(x)  # (N, C)
+            probs = torch.softmax(logits, dim=1).cpu().numpy()  # (N, C)
+
+        out = []
+        for row in probs:
+            labels = [self.idx_to_class[int(i)] for i in range(len(row))]
+            out.append({label: float(p) for label, p in zip(labels, row)})
+
+        return out
+
+    def predict_best_from_candidates(self, candidates: list[np.ndarray], *,
+                                     scoring_method: str = None,
+                                     early_stop: float = None,
+                                     batch_predict: bool = None) -> Optional[str]:
+        """
+        Given a list of candidate segments (np.ndarray (T,F)), returns the
+        most probable class label according to scoring_method.
+
+        Parameters:
+            candidates: list of np.ndarray segments
+            scoring_method: override settings.SEGMENTER_SCORING_METHOD
+            early_stop: override settings.SEGMENTER_EARLY_STOP_PROB
+            batch_predict: override settings.SEGMENTER_BATCH_PREDICT
+
+        Returns:
+            label (str) or None if candidates empty
+        """
+        if not candidates:
+            return cast(Optional[str], None)
+
+        scoring_method = scoring_method or settings.SEGMENTER_SCORING_METHOD
+        early_stop = early_stop if early_stop is not None else settings.SEGMENTER_EARLY_STOP_PROB
+        batch_predict = batch_predict if batch_predict is not None else settings.SEGMENTER_BATCH_PREDICT
 
 
+        resampled = [np.array(seq, dtype=np.float32) for seq in candidates]
+
+        # Get probability dictionaries
+        if batch_predict:
+            probs_list = self.predict_proba_batch(resampled)
+        else:
+            probs_list = [self.predict_proba(seq) for seq in resampled]
+
+
+        # New aggregate scoring: sum probabilities per label across all
+        # candidates and pick the label with highest total probability.
+        if scoring_method == 'sum_label_probs':
+            totals: Dict[str, float] = {}
+            for probs in probs_list:
+                for label, p in probs.items():
+                    totals[label] = totals.get(label, 0.0) + float(p)
+
+            if not totals:
+                return cast(Optional[str], None)
+
+            # return label with maximum aggregated probability
+            return max(totals.items(), key=lambda kv: kv[1])[0]
+
+        # Fallback: evaluate candidates individually and pick best by chosen
+        # per-candidate scoring method (existing behavior)
+        best_score = -float('inf')
+        best_label = None
+
+        for probs in probs_list:
+            if not probs:
+                score = -float('inf')
+            else:
+                vals = list(probs.values())
+                if scoring_method == 'sum_prob':
+                    score = sum(vals)
+                elif scoring_method == 'mean_prob':
+                    score = float(sum(vals)) / len(vals) if vals else 0.0
+                elif scoring_method == 'neg_entropy':
+                    # negative entropy (higher is better)
+                    probs_arr = np.array(vals, dtype=np.float64)
+                    probs_arr = np.clip(probs_arr, 1e-12, 1.0)
+                    ent = -np.sum(probs_arr * np.log(probs_arr))
+                    score = -ent
+                else:
+                    # default: max probability
+                    score = max(vals)
+
+            if score > best_score:
+                best_score = score
+                # choose label with highest probability in this candidate
+                best_label = max(probs.items(), key=lambda kv: kv[1])[0]
+
+            if early_stop is not None and best_score >= early_stop:
+                break
+
+        return best_label
 
     # ------------------------------------------------------------------
     # Convenience method for pipeline

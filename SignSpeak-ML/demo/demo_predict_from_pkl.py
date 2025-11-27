@@ -216,8 +216,43 @@ def run_demo(pkl_path: str, window_size: int, stride: int, drop_incomplete: bool
         print("No windows created. Exiting.")
         return
 
+    # --- Helper function to extract texts from response ---
+    def _collect_texts_from_resp(resp: Any) -> List[str]:
+        texts: List[str] = []
+        if not isinstance(resp, dict):
+            return texts
+        # top-level known keys
+        for key in ("sentence", "text", "transcription", "prediction", "predicted_text", "decoded"):
+            v = resp.get(key)
+            if isinstance(v, str) and v.strip():
+                texts.append(v.strip())
+
+        # inspect results payload
+        res = resp.get("results")
+        if isinstance(res, str) and res.strip():
+            texts.append(res.strip())
+        elif isinstance(res, list):
+            for itm in res:
+                if isinstance(itm, str) and itm.strip():
+                    texts.append(itm.strip())
+                elif isinstance(itm, dict):
+                    for k in ("sentence", "text", "label", "prediction", "transcription", "decoded"):
+                        vv = itm.get(k)
+                        if isinstance(vv, str) and vv.strip():
+                            texts.append(vv.strip())
+        elif isinstance(res, dict):
+            for k in ("sentence", "text", "transcription", "prediction", "decoded"):
+                vv = res.get(k)
+                if isinstance(vv, str) and vv.strip():
+                    texts.append(vv.strip())
+        return texts
+
     # --- now collect sentences and word counts across all responses ---
-    collected_sentences = []  # list of tuples: (window_idx, sentence_text, word_count)
+    collected_sentences: List[tuple] = []  # list of tuples: (window_idx, sentence_text, word_count)
+
+    # --- timing lists for special events ---
+    word_added_times: List[float] = []
+    sentence_created_times: List[float] = []
 
     # Send each window to API
     url = predict_url()
@@ -232,15 +267,68 @@ def run_demo(pkl_path: str, window_size: int, stride: int, drop_incomplete: bool
             elapsed = time.time() - start_time
 
             # Check for API errors
-            if "error" in response:
+            if isinstance(response, dict) and "error" in response:
                 print(f"  ❌ API Error: {response['error']}")
                 continue
 
             # Extract results
-            results = response.get("results", [])
-            print(f"  ✓ Success (took {elapsed:.2f}s)")
+            results = response.get("results") if isinstance(response, dict) else None
+            print(f"  ✓ Success (request took {elapsed:.3f}s)")
 
-            # --- existing printing of results preview ---
+            # Normalize results to iterable list for inspection
+            if isinstance(results, list):
+                res_items = results
+            elif results is None:
+                res_items = []
+            else:
+                res_items = [results]
+
+            # Track whether sentence_created recorded for this response (avoid duplicates)
+            recorded_sentence_created = False
+
+            for item in res_items:
+                if not isinstance(item, dict):
+                    continue
+                status = item.get("status")
+
+                # word added event
+                if isinstance(status, str) and status.lower() == "word_added":
+                    word_added_times.append(elapsed)
+                    cur_words = item.get("current_words")
+                    prediction = item.get("prediction") or item.get("label") or None
+                    if isinstance(cur_words, list):
+                        print(f"  Event: word_added detected (response time: {elapsed:.3f}s). current_words_count={len(cur_words)}")
+                    else:
+                        print(f"  Event: word_added detected (response time: {elapsed:.3f}s).")
+                    # additionally print newly predicted token if available
+                    if isinstance(prediction, str):
+                        print(f"    Predicted token: {prediction}")
+
+                # sentence creation may be reported via status or presence of 'sentence' key
+                if (isinstance(status, str) and "sentence" in status.lower()) or ("sentence" in item and isinstance(item.get("sentence"), str) and item.get("sentence").strip()):
+                    sentence_created_times.append(elapsed)
+                    recorded_sentence_created = True
+                    sent_text = item.get("sentence") or item.get("prediction") or item.get("decoded") or ""
+                    sent_text = sent_text.strip()
+                    if sent_text:
+                        wc = len([w for w in sent_text.split() if w])
+                        collected_sentences.append((idx, sent_text, wc))
+                        print(f"  Event: sentence_created detected (response time: {elapsed:.3f}s). Sentence words={wc}")
+                    else:
+                        print(f"  Event: sentence_created detected (response time: {elapsed:.3f}s).")
+
+            # Also check top-level response for 'sentence' key if not yet recorded
+            if not recorded_sentence_created and isinstance(response, dict):
+                top_sentence = response.get("sentence")
+                if isinstance(top_sentence, str) and top_sentence.strip():
+                    sentence_created_times.append(elapsed)
+                    sent_text = top_sentence.strip()
+                    wc = len([w for w in sent_text.split() if w])
+                    collected_sentences.append((idx, sent_text, wc))
+                    print(f"  Event: sentence_created (top-level) detected (response time: {elapsed:.3f}s). Sentence words={wc}")
+                    recorded_sentence_created = True
+
+            # --- printing of results preview ---
             if isinstance(results, list):
                 if len(results) == 0:
                     print(f"  Results: (empty list)")
@@ -259,50 +347,21 @@ def run_demo(pkl_path: str, window_size: int, stride: int, drop_incomplete: bool
                 else:
                     print(f"  Results (preview): {results[:200]}...")
             else:
+                # if results was None or unexpected type
                 print(f"  Results type: {type(results)}, value: {results}")
 
-            # --- extract possible sentence(s) from response ---
-            def _collect_texts_from_resp(resp):
-                texts = []
-                # top-level known keys
-                for key in ("sentence", "text", "transcription", "prediction", "predicted_text", "decoded"):
-                    v = resp.get(key) if isinstance(resp, dict) else None
-                    if isinstance(v, str) and v.strip():
-                        texts.append(v.strip())
-
-                # inspect results payload
-                res = resp.get("results") if isinstance(resp, dict) else None
-                if isinstance(res, str) and res.strip():
-                    texts.append(res.strip())
-                elif isinstance(res, list):
-                    for item in res:
-                        if isinstance(item, str) and item.strip():
-                            texts.append(item.strip())
-                        elif isinstance(item, dict):
-                            for key in ("sentence", "text", "label", "prediction", "transcription"):
-                                vv = item.get(key)
-                                if isinstance(vv, str) and vv.strip():
-                                    texts.append(vv.strip())
-                elif isinstance(res, dict):
-                    for key in ("sentence", "text", "transcription", "prediction"):
-                        vv = res.get(key)
-                        if isinstance(vv, str) and vv.strip():
-                            texts.append(vv.strip())
-                return texts
-
-            found_texts = _collect_texts_from_resp(response)
-            # Deduplicate while preserving order
-            seen = set()
-            unique_texts = []
-            for t in found_texts:
-                if t not in seen:
-                    seen.add(t)
-                    unique_texts.append(t)
-
-            for t in unique_texts:
-                word_count = len([w for w in t.split() if w])
-                collected_sentences.append((idx, t, word_count))
-                print(f"  Sentence: \"{t}\"  (words: {word_count})")
+            # --- extract possible sentence(s) from response for additional cases ---
+            # Skip extra collection if sentence was already created and recorded
+            if not recorded_sentence_created:
+                found_texts = _collect_texts_from_resp(response)
+                # Deduplicate while preserving order and avoid re-adding already recorded sentences
+                seen = set(t for _, t, _ in collected_sentences)
+                for t in found_texts:
+                    if t and t not in seen:
+                        seen.add(t)
+                        wc = len([w for w in t.split() if w])
+                        collected_sentences.append((idx, t, wc))
+                        print(f"  Sentence: \"{t}\"  (words: {wc})")
 
         except urllib.error.HTTPError as e:
             print(f"  ❌ HTTP Error {e.code}: {e.reason}")
@@ -324,7 +383,30 @@ def run_demo(pkl_path: str, window_size: int, stride: int, drop_incomplete: bool
     else:
         print("No sentences collected from predictions.")
 
+    # --- Print timing summaries for special events ---
+    def _print_time_stats(name: str, times: List[float]):
+        if not times:
+            print(f"No '{name}' events recorded.")
+            return
+        count = len(times)
+        total = sum(times)
+        avg = total / count
+        mn = min(times)
+        mx = max(times)
+        print(f"{name} events: {count}, avg: {avg:.3f}s, min: {mn:.3f}s, max: {mx:.3f}s")
+
+    _print_time_stats("word_added", word_added_times)
+    _print_time_stats("sentence_created", sentence_created_times)
+
     print("=== Demo Complete ===")
+
+    # After demo, request model to reset its internal buffer (endpoint: /api/reset_buffer)
+    try:
+        reset_url = f"{get_base_url().rstrip('/')}/api/reset_buffer"
+        reset_resp = http_post_json(reset_url, {}, timeout=30.0)
+        print(f"Buffer reset response: {reset_resp}")
+    except Exception as e:
+        print(f"Failed to reset buffer: {e}")
 
 
 # -------------------------------------------------------------
@@ -350,7 +432,7 @@ def main():
     parser.add_argument(
         "--stride",
         type=int,
-        default=105,
+        default=100,
         help="Stride (step size) between windows (default: 30)"
     )
     parser.add_argument(

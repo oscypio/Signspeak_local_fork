@@ -274,6 +274,14 @@ def run_demo(pkl_path: str):
     print()
     print("=== Demo Complete ===")
 
+    # After demo, request model to reset its internal buffer (endpoint: /api/reset_buffer)
+    try:
+        reset_url = f"{get_base_url().rstrip('/')}/api/reset_buffer"
+        reset_resp = http_post_json(reset_url, {}, timeout=30.0)
+        print(f"Buffer reset response: {reset_resp}")
+    except Exception as e:
+        print(f"Failed to reset buffer: {e}")
+
 
 # -------------------------------------------------------------
 # CLI Entry Point
@@ -318,4 +326,3 @@ Examples:
 
 if __name__ == "__main__":
     main()
-
