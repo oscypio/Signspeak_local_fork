@@ -55,5 +55,27 @@ class Settings(BaseSettings):
     # Whether to use batch prediction in classifier for performance (optional)
     SEGMENTER_BATCH_PREDICT: bool = os.getenv('SEGMENTER_BATCH_PREDICT', True)
 
+    # ===== SLIDING WINDOW DETECTOR =====
+    # Enable sliding window detection instead of traditional segmenter
+    USE_SLIDING_WINDOW: bool = os.getenv('USE_SLIDING_WINDOW', False)
+
+    # Window size for sliding window (should match EXPECTED_FRAMES)
+    SLIDING_WINDOW_SIZE: int = int(os.getenv('SLIDING_WINDOW_SIZE', 70))
+
+    # Stride between consecutive windows (lower = more overlap, higher accuracy but slower)
+    SLIDING_WINDOW_STRIDE: int = int(os.getenv('SLIDING_WINDOW_STRIDE', 10))
+
+    # Number of consecutive windows with same prediction to confirm word
+    SLIDING_WINDOW_STABILITY_COUNT: int = int(os.getenv('SLIDING_WINDOW_STABILITY_COUNT', 3))
+
+    # Minimum confidence threshold to accept a prediction
+    SLIDING_WINDOW_MIN_CONFIDENCE: float = float(os.getenv('SLIDING_WINDOW_MIN_CONFIDENCE', 0.6))
+
+    # Maximum buffer size (frames to keep in memory)
+    SLIDING_WINDOW_MAX_BUFFER: int = int(os.getenv('SLIDING_WINDOW_MAX_BUFFER', 800))
+
+    # Use batch prediction for sliding windows (recommended for performance)
+    SLIDING_WINDOW_BATCH_PREDICT: bool = os.getenv('SLIDING_WINDOW_BATCH_PREDICT', True)
+
 
 settings = Settings()

@@ -6,6 +6,7 @@ from .utils.util_functions import *
 from ..schemas import FrameData
 from .preprocessing.DataPreparer import UnifiedDataPreparer
 from .segmentation.WordSegmenter import WordSegmenter
+from .segmentation.SlidingWindowDetector import SlidingWindowDetector
 from .classifier.ASLClassifier import ASLClassifier
 
 
@@ -28,6 +29,7 @@ class PipelineManager:
         # --- Components ---
         self.preparer = UnifiedDataPreparer()
         self.segmenter = WordSegmenter()
+        self.sliding_detector = SlidingWindowDetector()
         self.classifier = ASLClassifier()
 
         if settings.USE_T5:
@@ -46,7 +48,94 @@ class PipelineManager:
     # MAIN ENTRYPOINT
     # ------------------------------------------------------------------
     def process(self, frames: List[FrameData]) -> list[Dict[str, Any]]:
+        """
+        Main processing entry point. Routes to either:
+        - process_with_sliding_window() if USE_SLIDING_WINDOW is enabled
+        - process_with_segmenter() (traditional approach) otherwise
+        """
+        if settings.USE_SLIDING_WINDOW:
+            return self.process_with_sliding_window(frames)
+        else:
+            return self.process_with_segmenter(frames)
 
+    # ------------------------------------------------------------------
+    # SLIDING WINDOW PROCESSING
+    # ------------------------------------------------------------------
+    def process_with_sliding_window(self, frames: List[FrameData]) -> list[Dict[str, Any]]:
+        """
+        Process frames using sliding window detector.
+
+        This approach doesn't rely on motion-based segmentation.
+        Instead, it classifies overlapping temporal windows and emits
+        words when stable predictions are detected.
+        """
+        # ====================================================
+        # 1) Preprocess raw API frames
+        # ====================================================
+        seq = self.preparer.prepare_raw(frames)   # → (T,168)
+
+        if seq is None or len(seq) == 0:
+            return [generate_no_word_response()]
+
+        # ====================================================
+        # 2) Process frames through sliding window detector
+        # ====================================================
+        responses = []
+
+        if settings.SLIDING_WINDOW_BATCH_PREDICT:
+            # Optimized batch processing
+            detected_words = self.sliding_detector.add_frames_batch_optimized(
+                list(seq), self.classifier, self.preparer
+            )
+        else:
+            # Frame-by-frame processing
+            detected_words = []
+            for vec in seq:
+                result = self.sliding_detector.add_frame(
+                    vec, self.classifier, self.preparer
+                )
+                if result is not None:
+                    detected_words.append(result)
+
+        # ====================================================
+        # 3) Process detected words
+        # ====================================================
+        for word, confidence in detected_words:
+
+            # ====================================================
+            # 4) Special symbol -> end of sentence
+            # ====================================================
+            if word == settings.SPECIAL_LABEL:
+                final_sentence = " ".join(self.word_buffer)
+                self.word_buffer.clear()
+                final_sentence = self.polisher.polish(final_sentence)
+
+                self.sentence_buffer.append(final_sentence)
+                responses.append(generate_end_of_sentence_response(final_sentence))
+                continue
+
+            # ====================================================
+            # 5) Normal word -> add to buffer
+            # ====================================================
+            self.word_buffer.append(word)
+            responses.append(generate_given_word_response(word, self.word_buffer))
+
+        # If no words detected, return no-word response
+        if not responses:
+            return [generate_no_word_response()]
+
+        return responses
+
+    # ------------------------------------------------------------------
+    # TRADITIONAL SEGMENTER PROCESSING
+    # ------------------------------------------------------------------
+    def process_with_segmenter(self, frames: List[FrameData]) -> list[Dict[str, Any]]:
+        """
+        Traditional processing pipeline using motion-based segmentation.
+
+        This is the original approach that detects word boundaries
+        through motion analysis (silence detection).
+        """
         # ====================================================
         # 1) Preprocess raw API frames
         # ====================================================
@@ -138,5 +227,7 @@ class PipelineManager:
         return response
 
     def reset_buffer(self):
-        """Reset internal word buffer."""
+        """Reset internal word buffer and detector state."""
         self.word_buffer.clear()
+        if settings.USE_SLIDING_WINDOW:
+            self.sliding_detector.reset()
