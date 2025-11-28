@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     SEGMENTER_ALTERNATIVES_COUNT: int = int(os.getenv('SEGMENTER_ALTERNATIVES_COUNT', 10))
 
     # Maximum shift in frames when generating start/end variants
-    SEGMENTER_MAX_SHIFT_FRAMES: int = int(os.getenv('SEGMENTER_MAX_SHIFT_FRAMES', 10))
+    SEGMENTER_MAX_SHIFT_FRAMES: int = int(os.getenv('SEGMENTER_MAX_SHIFT_FRAMES', 15))
 
     # Strategy for variant generation: currently only 'shift_trim' supported
     SEGMENTER_VARIANTS_STRATEGY: str = os.getenv('SEGMENTER_VARIANTS_STRATEGY', 'shift_trim')
@@ -69,13 +69,60 @@ class Settings(BaseSettings):
     SLIDING_WINDOW_STABILITY_COUNT: int = int(os.getenv('SLIDING_WINDOW_STABILITY_COUNT', 3))
 
     # Minimum confidence threshold to accept a prediction
-    SLIDING_WINDOW_MIN_CONFIDENCE: float = float(os.getenv('SLIDING_WINDOW_MIN_CONFIDENCE', 0.6))
+    SLIDING_WINDOW_MIN_CONFIDENCE: float = float(os.getenv('SLIDING_WINDOW_MIN_CONFIDENCE', 0.5))
 
     # Maximum buffer size (frames to keep in memory)
     SLIDING_WINDOW_MAX_BUFFER: int = int(os.getenv('SLIDING_WINDOW_MAX_BUFFER', 800))
 
     # Use batch prediction for sliding windows (recommended for performance)
     SLIDING_WINDOW_BATCH_PREDICT: bool = os.getenv('SLIDING_WINDOW_BATCH_PREDICT', True)
+
+    # ===== HYBRID MODE =====
+    # Use both segmenter and sliding window, combine results intelligently
+    USE_HYBRID_MODE: bool = os.getenv('USE_HYBRID_MODE', True)
+
+    # Strategy for combining segmenter and sliding window results:
+    # - 'max_confidence': Choose detection with highest confidence
+    # - 'voting': Use majority voting if both detect same word
+    # - 'segmenter_primary': Use sliding window only if segmenter has low confidence
+    # - 'sliding_primary': Use segmenter only if sliding window has low confidence
+    HYBRID_STRATEGY: str = os.getenv('HYBRID_STRATEGY', 'segmenter_primary')
+
+    # Minimum confidence difference to prefer one method over another
+    HYBRID_CONFIDENCE_THRESHOLD: float = float(os.getenv('HYBRID_CONFIDENCE_THRESHOLD', 0.1))
+
+    # If both methods agree on the word, boost confidence
+    HYBRID_AGREEMENT_BOOST: float = float(os.getenv('HYBRID_AGREEMENT_BOOST', 0.15))
+
+    # ===== HYBRID TEMPORAL MATCHING =====
+    # Minimum temporal overlap (IoU) to consider two detections as same segment
+    HYBRID_OVERLAP_THRESHOLD: float = float(os.getenv('HYBRID_OVERLAP_THRESHOLD', 0.5))
+
+    # Strategy when no temporal match found:
+    # - 'include_all': Add both segmenter-only and sliding-only detections (default)
+    # - 'require_both': Discard detections without a match (high precision)
+    # - 'prefer_segmenter': Only add segmenter-only detections
+    # - 'prefer_sliding': Only add sliding-only detections
+    HYBRID_NO_MATCH_STRATEGY: str = os.getenv('HYBRID_NO_MATCH_STRATEGY', 'prefer_segmenter')
+
+    # Word-level deduplication for same words without IoU match
+    HYBRID_WORD_DEDUP_ENABLED: bool = os.getenv('HYBRID_WORD_DEDUP_ENABLED', True)
+
+    # How to choose when deduplicating same word:
+    # - 'max_confidence': Keep detection with highest confidence (default)
+    # - 'first': Keep first detection chronologically
+    # - 'merge': Average confidences
+    HYBRID_DEDUP_STRATEGY: str = os.getenv('HYBRID_DEDUP_STRATEGY', 'max_confidence')
+
+    # ===== BUFFER FLUSH =====
+    # Force emission of buffered content when batch ends (prevents losing last word)
+    FORCE_FLUSH_ON_BATCH_END: bool = os.getenv('FORCE_FLUSH_ON_BATCH_END', False)
+
+    # Minimum frames in buffer to force flush (prevents flushing noise)
+    MIN_FRAMES_FOR_FLUSH: int = int(os.getenv('MIN_FRAMES_FOR_FLUSH', 20))
+
+    # Minimum confidence for forced flush (lower than normal to catch uncertain words)
+    FLUSH_MIN_CONFIDENCE: float = float(os.getenv('FLUSH_MIN_CONFIDENCE', 0.4))
 
 
 settings = Settings()

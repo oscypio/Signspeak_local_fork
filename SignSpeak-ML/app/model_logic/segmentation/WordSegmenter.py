@@ -36,6 +36,9 @@ class WordSegmenter:
         self.silence_count = 0
         self.ema_motion = 0.0
 
+        # Track total frames for temporal position
+        self.total_frames_processed = 0
+
     # -------------------------------------------------------
 
     def add_frame(self, frame_vec: np.ndarray):
@@ -45,6 +48,8 @@ class WordSegmenter:
             None
             or np.ndarray(T, F) — completed word
         """
+        # Increment frame counter
+        self.total_frames_processed += 1
 
         # First frame
         if self.prev_frame is None:
@@ -64,9 +69,6 @@ class WordSegmenter:
         # Update previous frame and buffer
         self.prev_frame = frame_vec
         self.buffer.append(frame_vec)
-
-        #print(
-        #    f"movement={movement:.6f}, ema={self.ema_motion:.6f}, silence={self.silence_count}, buf={len(self.buffer)}")
 
         # ====================================================
         # 1. Burst detection (adaptive start-of-word boost)
@@ -111,6 +113,29 @@ class WordSegmenter:
 
         return None
 
+    def flush_buffer(self, min_frames: int = None) -> np.ndarray:
+        """
+        Force emission of buffered content (for end of batch/session).
+
+        Args:
+            min_frames: Minimum frames required to flush (default from config)
+
+        Returns:
+            np.ndarray of buffered frames, or None if buffer too small
+        """
+        min_frames = min_frames or settings.MIN_FRAMES_FOR_FLUSH
+
+        if len(self.buffer) < min_frames:
+            return None
+
+        # Emit entire buffer (don't trim silence - it's the end!)
+        word_frames_np = np.array(self.buffer, dtype=np.float32)
+
+        # Clear buffer
+        self.buffer = []
+
+        return word_frames_np
+
     def add_frame_with_alternatives(self, frame_vec: np.ndarray):
         """
         Backwards-compatible alternative to `add_frame`.
@@ -126,6 +151,9 @@ class WordSegmenter:
             None or List[np.ndarray]
         """
         from ..utils.config import settings
+
+        # Increment frame counter (same as add_frame)
+        self.total_frames_processed += 1
 
         # Reuse existing add_frame logic to update state without returning
         # the segment. We'll replicate detection here to capture indices.
@@ -221,3 +249,18 @@ class WordSegmenter:
             return variants
 
         return None
+
+
+    def reset(self):
+        """
+        Reset segmenter state completely.
+
+        Call this between independent processing batches/windows to avoid
+        state contamination from previous data.
+        """
+        self.buffer = []
+        self.prev_frame = None
+        self.prev_movement = 0.0
+        self.silence_count = 0
+        self.ema_motion = 0.0
+        # Note: total_frames_processed is NOT reset - it's cumulative

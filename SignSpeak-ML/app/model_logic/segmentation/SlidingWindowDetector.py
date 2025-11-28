@@ -84,6 +84,41 @@ class SlidingWindowDetector:
         self.emission_history.clear()
         self.total_frames_processed = 0
 
+    def _calibrate_confidence(self, proba_dict: Dict[str, float]) -> Tuple[str, float]:
+        """
+        Calibrate confidence using margin-based approach.
+
+        Instead of using raw max probability, use the margin between
+        top-1 and top-2 predictions multiplied by max probability.
+        This better reflects true confidence.
+
+        Args:
+            proba_dict: {label: probability} from classifier
+
+        Returns:
+            (predicted_word, calibrated_confidence)
+        """
+        if not proba_dict:
+            return (None, 0.0)
+
+        # Sort by probability descending
+        sorted_items = sorted(proba_dict.items(), key=lambda x: x[1], reverse=True)
+
+        top_word, top_prob = sorted_items[0]
+
+        if len(sorted_items) < 2:
+            # Only one class, use raw probability
+            return (top_word, top_prob)
+
+        second_prob = sorted_items[1][1]
+
+        # Margin-based confidence: (top - second) * top
+        # This penalizes predictions where second-best is close
+        margin = top_prob - second_prob
+        calibrated_conf = margin * top_prob
+
+        return (top_word, calibrated_conf)
+
     def add_frame(
         self,
         frame_vec: np.ndarray,
@@ -126,8 +161,7 @@ class SlidingWindowDetector:
 
         # Classify the window
         proba_dict = classifier.predict_proba(prepared_window)
-        predicted_word = max(proba_dict.items(), key=lambda x: x[1])[0]
-        confidence = proba_dict[predicted_word]
+        predicted_word, confidence = self._calibrate_confidence(proba_dict)
 
         # Filter out low-confidence predictions
         if confidence < self.min_confidence:
@@ -242,8 +276,7 @@ class SlidingWindowDetector:
 
             # Process predictions
             for proba_dict in proba_dicts:
-                predicted_word = max(proba_dict.items(), key=lambda x: x[1])[0]
-                confidence = proba_dict[predicted_word]
+                predicted_word, confidence = self._calibrate_confidence(proba_dict)
 
                 # Apply same logic as add_frame
                 if confidence < self.min_confidence:
@@ -282,3 +315,47 @@ class SlidingWindowDetector:
             "words_emitted": len(self.emission_history),
         }
 
+    def flush_buffer(
+        self,
+        classifier: Any,
+        preparer: Any,
+        min_confidence: float = None
+    ) -> Optional[Tuple[str, float]]:
+        """
+        Force emission of last tracked word (for end of batch/session).
+
+        This allows emitting a word even if stability_count hasn't been reached,
+        preventing loss of the last word in a sequence.
+
+        Args:
+            classifier: ASLClassifier instance
+            preparer: DataPreparer instance
+            min_confidence: Override minimum confidence (default from config)
+
+        Returns:
+            (word, confidence) if there's a valid prediction, None otherwise
+        """
+        min_confidence = min_confidence or settings.FLUSH_MIN_CONFIDENCE
+
+        # Check if we have enough frames
+        if len(self.frame_buffer) < settings.MIN_FRAMES_FOR_FLUSH:
+            return None
+
+        # Check if we have a tracked prediction
+        if self.last_predicted_word is None:
+            return None
+
+        # Check if we've already emitted this word recently (cooldown)
+        if self.last_predicted_word in self.emission_history:
+            frames_since = self.total_frames_processed - self.emission_history[self.last_predicted_word]
+            if frames_since < self.cooldown_frames:
+                return None
+
+        # Check confidence threshold (use lower threshold for flush)
+        if self.last_predicted_confidence < min_confidence:
+            return None
+
+        # Emit the word!
+        self.emission_history[self.last_predicted_word] = self.total_frames_processed
+
+        return (self.last_predicted_word, self.last_predicted_confidence)
