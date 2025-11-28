@@ -9,8 +9,6 @@ export class WebSocketManager {
 
     /**
      * Establishes a STOMP connection.
-     * @param {object} callbacks - An object with { onOpen, onMessage, onError, onClose }
-     * @param {string} meetingId - The ID of the meeting to subscribe to.
      */
     connect(callbacks = {}, meetingId) {
         const { onOpen = () => {}, onMessage = () => {}, onError = () => {}, onClose = () => {} } = callbacks;
@@ -97,4 +95,22 @@ export class WebSocketManager {
             console.log("STOMP client deactivated.");
         }
     }
+
+    /**
+     * Send a command to the backend to make all connected clients talk.
+     */
+    sendAudioTrigger(text, meetingId) {
+        if (!this.stompClient || !this.stompClient.connected) return;
+
+        const payload = {
+            text: text,
+            meetingId: meetingId
+        };
+
+        this.stompClient.publish({
+            destination: '/app/speak',
+            body: JSON.stringify(payload)
+        });
+    }
+
 }

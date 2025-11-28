@@ -8,7 +8,8 @@ import About from "./pages/About"
 import Contact from "./pages/Contact"
 import FAQ from "./pages/FAQ"
 import "./styles/index.css"
-import Footer from "./components/footer"
+import Footer from "./components/Footer"
+import { TranslationProvider } from './context/TranslationContext';
 
 function App() {
   const [currentPage, setCurrentPage] = useState("home")
@@ -35,11 +36,13 @@ function App() {
   }
 
   return (
-    <div className="app">
-      <Header onNavigate={handleNavigate} currentPage={currentPage} />
-      <main className="main-content">{renderPage()}</main>
-      <Footer />
-    </div>
+      <TranslationProvider>
+        <div className="app">
+          <Header onNavigate={handleNavigate} currentPage={currentPage} />
+          <main className="main-content">{renderPage()}</main>
+          <Footer />
+        </div>
+      </TranslationProvider>
   )
 }
 
