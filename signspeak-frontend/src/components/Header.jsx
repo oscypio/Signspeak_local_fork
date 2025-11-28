@@ -1,4 +1,3 @@
-"use client"
 import "../../src/styles/Header.css"
 
 function Header({ onNavigate, currentPage }) {

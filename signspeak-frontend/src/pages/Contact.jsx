@@ -7,7 +7,9 @@ function Contact({onNavigate}) {
     
     const [formData, setFormData] = useState({
         name: "",
+        lastName: "",
         email: "",
+        phone: "",
         subject: "",
         message: "",
     })
@@ -31,7 +33,9 @@ function Contact({onNavigate}) {
         setTimeout(() => {
         setFormData({
             name: "",
+            lastName: "",
             email: "",
+            phone: "",
             subject: "",
             message: "",
         })
