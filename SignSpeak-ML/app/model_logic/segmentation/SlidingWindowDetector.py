@@ -72,7 +72,7 @@ class SlidingWindowDetector:
         self.total_frames_processed: int = 0
 
         # Cooldown: prevent emitting same word too quickly
-        self.cooldown_frames: int = window_size // 2  # Half window as cooldown
+        self.cooldown_frames: int = window_size // 3  # Allow faster repetitions (was // 2)
 
     def reset(self):
         """Reset detector state (useful between sentences or sessions)"""
@@ -165,9 +165,12 @@ class SlidingWindowDetector:
 
         # Filter out low-confidence predictions
         if confidence < self.min_confidence:
-            # Reset tracking if confidence drops
-            self.last_predicted_word = None
+            # Don't reset last_predicted_word - keep it for flush!
+            # Only reset consecutive count
             self.consecutive_count = 0
+            # Update confidence if it's the same word (for flush to use updated value)
+            if predicted_word == self.last_predicted_word:
+                self.last_predicted_confidence = confidence
             return None
 
         # Check stability: is this the same as last prediction?
@@ -301,6 +304,12 @@ class SlidingWindowDetector:
                     self.emission_history[predicted_word] = self.total_frames_processed
                     detected_words.append((predicted_word, confidence))
 
+        # NEW: Flush at end of batch if enabled
+        if settings.FORCE_FLUSH_ON_BATCH_END:
+            flushed_result = self.flush_buffer(classifier, preparer)
+            if flushed_result is not None:
+                detected_words.append(flushed_result)
+
         return detected_words
 
     def get_state_info(self) -> Dict[str, Any]:
@@ -322,10 +331,12 @@ class SlidingWindowDetector:
         min_confidence: float = None
     ) -> Optional[Tuple[str, float]]:
         """
-        Force emission of last tracked word (for end of batch/session).
+        Force emission of last word (for end of batch/session).
 
-        This allows emitting a word even if stability_count hasn't been reached,
-        preventing loss of the last word in a sequence.
+        IMPROVED VERSION with 3 fallback strategies:
+        1. Return last tracked word (most reliable)
+        2. Classify current buffer as final window
+        3. Try short buffer classification (last resort)
 
         Args:
             classifier: ASLClassifier instance
@@ -337,25 +348,64 @@ class SlidingWindowDetector:
         """
         min_confidence = min_confidence or settings.FLUSH_MIN_CONFIDENCE
 
-        # Check if we have enough frames
+        # Check if we have enough frames at all
         if len(self.frame_buffer) < settings.MIN_FRAMES_FOR_FLUSH:
             return None
 
-        # Check if we have a tracked prediction
-        if self.last_predicted_word is None:
-            return None
+        # Strategy 1: Return last tracked word (most reliable)
+        if self.last_predicted_word is not None:
+            if self.last_predicted_confidence >= min_confidence:
+                # Use relaxed cooldown for flush (it's end of batch anyway)
+                relaxed_cooldown = max(1, self.cooldown_frames // 2)
 
-        # Check if we've already emitted this word recently (cooldown)
-        if self.last_predicted_word in self.emission_history:
-            frames_since = self.total_frames_processed - self.emission_history[self.last_predicted_word]
-            if frames_since < self.cooldown_frames:
-                return None
+                if self.last_predicted_word in self.emission_history:
+                    frames_since = self.total_frames_processed - self.emission_history[self.last_predicted_word]
+                    if frames_since >= relaxed_cooldown:
+                        # Enough time passed, emit it
+                        self.emission_history[self.last_predicted_word] = self.total_frames_processed
+                        return (self.last_predicted_word, self.last_predicted_confidence)
+                else:
+                    # Never emitted before, definitely return it
+                    self.emission_history[self.last_predicted_word] = self.total_frames_processed
+                    return (self.last_predicted_word, self.last_predicted_confidence)
 
-        # Check confidence threshold (use lower threshold for flush)
-        if self.last_predicted_confidence < min_confidence:
-            return None
+        # Strategy 2: Classify current buffer as final window
+        if len(self.frame_buffer) >= self.window_size:
+            window_frames = list(self.frame_buffer)[-self.window_size:]
+            window_np = np.array(window_frames, dtype=np.float32)
+            prepared = preparer.prepare_resampled(window_np)
 
-        # Emit the word!
-        self.emission_history[self.last_predicted_word] = self.total_frames_processed
+            proba_dict = classifier.predict_proba(prepared)
+            predicted_word, confidence = self._calibrate_confidence(proba_dict)
 
-        return (self.last_predicted_word, self.last_predicted_confidence)
+            if predicted_word and confidence >= min_confidence:
+                # Check if not recently emitted
+                if predicted_word in self.emission_history:
+                    frames_since = self.total_frames_processed - self.emission_history[predicted_word]
+                    relaxed_cooldown = max(1, self.cooldown_frames // 2)
+
+                    if frames_since < relaxed_cooldown:
+                        # Too recent, skip
+                        return None
+
+                # Emit new prediction
+                self.emission_history[predicted_word] = self.total_frames_processed
+                return (predicted_word, confidence)
+
+        # Strategy 3: Short buffer classification (last resort)
+        if settings.MIN_FRAMES_FOR_FLUSH <= len(self.frame_buffer) < self.window_size:
+            buffer_np = np.array(list(self.frame_buffer), dtype=np.float32)
+            prepared = preparer.prepare_resampled(buffer_np)
+
+            proba_dict = classifier.predict_proba(prepared)
+            predicted_word, confidence = self._calibrate_confidence(proba_dict)
+
+            # Use even lower threshold for short buffers
+            very_low_threshold = min_confidence * 0.8
+
+            if predicted_word and confidence >= very_low_threshold:
+                if predicted_word not in self.emission_history:
+                    self.emission_history[predicted_word] = self.total_frames_processed
+                    return (predicted_word, confidence)
+
+        return None

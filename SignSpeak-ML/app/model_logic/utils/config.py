@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     # ==== SEGMENTER ====
     MOTION_THRESHOLD: float = 0.12
-    SILENCE_FRAMES: int = 15
+    SILENCE_FRAMES: int = 6
     MIN_WORD_FRAMES: int = 8
     BURST_MULTIPLIER: float = 2.00
     EMA_ALPHA = 0.40
@@ -69,7 +69,7 @@ class Settings(BaseSettings):
     SLIDING_WINDOW_STABILITY_COUNT: int = int(os.getenv('SLIDING_WINDOW_STABILITY_COUNT', 3))
 
     # Minimum confidence threshold to accept a prediction
-    SLIDING_WINDOW_MIN_CONFIDENCE: float = float(os.getenv('SLIDING_WINDOW_MIN_CONFIDENCE', 0.5))
+    SLIDING_WINDOW_MIN_CONFIDENCE: float = float(os.getenv('SLIDING_WINDOW_MIN_CONFIDENCE', 0.6))
 
     # Maximum buffer size (frames to keep in memory)
     SLIDING_WINDOW_MAX_BUFFER: int = int(os.getenv('SLIDING_WINDOW_MAX_BUFFER', 800))
@@ -86,7 +86,7 @@ class Settings(BaseSettings):
     # - 'voting': Use majority voting if both detect same word
     # - 'segmenter_primary': Use sliding window only if segmenter has low confidence
     # - 'sliding_primary': Use segmenter only if sliding window has low confidence
-    HYBRID_STRATEGY: str = os.getenv('HYBRID_STRATEGY', 'segmenter_primary')
+    HYBRID_STRATEGY: str = os.getenv('HYBRID_STRATEGY', 'max_confidence')
 
     # Minimum confidence difference to prefer one method over another
     HYBRID_CONFIDENCE_THRESHOLD: float = float(os.getenv('HYBRID_CONFIDENCE_THRESHOLD', 0.1))
@@ -105,8 +105,8 @@ class Settings(BaseSettings):
     # - 'prefer_sliding': Only add sliding-only detections
     HYBRID_NO_MATCH_STRATEGY: str = os.getenv('HYBRID_NO_MATCH_STRATEGY', 'prefer_segmenter')
 
-    # Word-level deduplication for same words without IoU match
-    HYBRID_WORD_DEDUP_ENABLED: bool = os.getenv('HYBRID_WORD_DEDUP_ENABLED', True)
+    # Word-level deduplication for same words without IoU match - now obsolete (use only for debug)
+    HYBRID_WORD_DEDUP_ENABLED: bool = os.getenv('HYBRID_WORD_DEDUP_ENABLED', False)
 
     # How to choose when deduplicating same word:
     # - 'max_confidence': Keep detection with highest confidence (default)
@@ -116,7 +116,7 @@ class Settings(BaseSettings):
 
     # ===== BUFFER FLUSH =====
     # Force emission of buffered content when batch ends (prevents losing last word)
-    FORCE_FLUSH_ON_BATCH_END: bool = os.getenv('FORCE_FLUSH_ON_BATCH_END', False)
+    FORCE_FLUSH_ON_BATCH_END: bool = os.getenv('FORCE_FLUSH_ON_BATCH_END', True)
 
     # Minimum frames in buffer to force flush (prevents flushing noise)
     MIN_FRAMES_FOR_FLUSH: int = int(os.getenv('MIN_FRAMES_FOR_FLUSH', 20))

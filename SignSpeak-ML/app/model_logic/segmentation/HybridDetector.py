@@ -10,12 +10,12 @@ Key Features:
 - Combines results using configurable strategies
 - Boosts confidence when both methods agree
 - Falls back to stronger method when one fails
+- Uses temporal information (IoU) to match detections
 
 Author: SignSpeak Team
 """
 
-import numpy as np
-from typing import List, Tuple, Dict, Any, Optional
+from typing import List, Tuple, Dict, Any
 from ..utils.config import settings
 
 
@@ -58,27 +58,27 @@ class HybridDetector:
 
     def combine_detections(
         self,
-        segmenter_results: List[Tuple[str, float]],
-        sliding_results: List[Tuple[str, float]],
-    ) -> List[Tuple[str, float]]:
+        segmenter_results: List[Tuple[str, float, int, int]],
+        sliding_results: List[Tuple[str, float, int, int]],
+    ) -> List[Tuple[str, float, int, int]]:
         """
         Combine detections from both methods using configured strategy.
 
         Args:
-            segmenter_results: List of (word, confidence) from segmenter
-            sliding_results: List of (word, confidence) from sliding window
+            segmenter_results: List of (word, confidence, start_frame, end_frame) from segmenter
+            sliding_results: List of (word, confidence, start_frame, end_frame) from sliding window
 
         Returns:
-            Combined list of (word, confidence) tuples
+            Combined list of (word, confidence, start_frame, end_frame) tuples sorted by start_frame
         """
         if not segmenter_results and not sliding_results:
             return []
 
         if not segmenter_results:
-            return sliding_results
+            return sorted(sliding_results, key=lambda x: x[2])
 
         if not sliding_results:
-            return segmenter_results
+            return sorted(segmenter_results, key=lambda x: x[2])
 
         # Apply strategy
         if self.strategy == 'max_confidence':
@@ -95,181 +95,224 @@ class HybridDetector:
 
     def _combine_max_confidence(
         self,
-        segmenter_results: List[Tuple[str, float]],
-        sliding_results: List[Tuple[str, float]],
-    ) -> List[Tuple[str, float]]:
+        segmenter_results: List[Tuple[str, float, int, int]],
+        sliding_results: List[Tuple[str, float, int, int]],
+    ) -> List[Tuple[str, float, int, int]]:
         """
         Choose detection with highest confidence from either method.
-        Boost confidence if both methods agree.
+        Boost confidence if both methods agree (same word + overlapping temporal region).
         """
         combined = []
+        used_seg_indices = set()
+        used_slide_indices = set()
 
-        # Create lookup maps for faster access
-        seg_map = {word: conf for word, conf in segmenter_results}
-        slide_map = {word: conf for word, conf in sliding_results}
+        # For each segmenter detection, find best matching sliding detection
+        for seg_idx, (seg_word, seg_conf, seg_start, seg_end) in enumerate(segmenter_results):
+            best_match = None
+            best_iou = 0.0
+            best_slide_idx = -1
 
-        # Get all unique words detected
-        all_words = set(seg_map.keys()) | set(slide_map.keys())
+            # Find sliding detections with temporal overlap
+            for slide_idx, (slide_word, slide_conf, slide_start, slide_end) in enumerate(sliding_results):
+                if slide_idx in used_slide_indices:
+                    continue
 
-        for word in all_words:
-            seg_conf = seg_map.get(word, 0.0)
-            slide_conf = slide_map.get(word, 0.0)
+                # Calculate temporal IoU
+                iou = self._calculate_temporal_iou(seg_start, seg_end, slide_start, slide_end)
 
-            if seg_conf > 0 and slide_conf > 0:
-                # Both methods detected this word - AGREEMENT!
+                # Check if there's significant overlap and same word
+                if iou > settings.HYBRID_OVERLAP_THRESHOLD and seg_word == slide_word:
+                    if iou > best_iou:
+                        best_iou = iou
+                        best_match = (slide_word, slide_conf, slide_start, slide_end)
+                        best_slide_idx = slide_idx
+
+            if best_match:
+                # AGREEMENT: Both methods detected same word in overlapping region
                 self.stats['agreements'] += 1
                 self.stats['total_boosted'] += 1
 
-                # Use max confidence and apply boost
-                max_conf = max(seg_conf, slide_conf)
+                # Use max confidence and apply agreement boost
+                max_conf = max(seg_conf, best_match[1])
                 boosted_conf = min(1.0, max_conf + self.agreement_boost)
-                combined.append((word, boosted_conf))
 
-            elif seg_conf > slide_conf:
-                # Only segmenter or segmenter has higher confidence
-                self.stats['segmenter_wins'] += 1
-                combined.append((word, seg_conf))
+                # Use temporal boundaries from higher-confidence detection
+                if seg_conf > best_match[1]:
+                    combined.append((seg_word, boosted_conf, seg_start, seg_end))
+                    self.stats['segmenter_wins'] += 1
+                else:
+                    combined.append((best_match[0], boosted_conf, best_match[2], best_match[3]))
+                    self.stats['sliding_wins'] += 1
 
+                used_seg_indices.add(seg_idx)
+                used_slide_indices.add(best_slide_idx)
             else:
-                # Only sliding window or sliding window has higher confidence
-                self.stats['sliding_wins'] += 1
-                combined.append((word, slide_conf))
+                # Only segmenter detected this word
+                if seg_conf > 0:  # FIX: Check confidence is actually > 0
+                    self.stats['segmenter_wins'] += 1
+                    combined.append((seg_word, seg_conf, seg_start, seg_end))
+                    used_seg_indices.add(seg_idx)
+
+        # Add sliding-only detections that weren't matched
+        for slide_idx, (slide_word, slide_conf, slide_start, slide_end) in enumerate(sliding_results):
+            if slide_idx not in used_slide_indices:
+                if slide_conf > 0:  # FIX: Check confidence is actually > 0
+                    self.stats['sliding_wins'] += 1
+                    combined.append((slide_word, slide_conf, slide_start, slide_end))
 
         self.stats['total_detections'] += len(combined)
 
-        # Apply word-level deduplication
-        combined = self._deduplicate_by_word(combined)
+        # Sort by start frame to preserve temporal order
+        combined.sort(key=lambda x: x[2])
+
+        # Apply word-level deduplication with temporal awareness
+        if settings.HYBRID_WORD_DEDUP_ENABLED:
+            combined = self._deduplicate_by_word_with_temporal(combined)
 
         return combined
 
     def _combine_voting(
         self,
-        segmenter_results: List[Tuple[str, float]],
-        sliding_results: List[Tuple[str, float]],
-    ) -> List[Tuple[str, float]]:
+        segmenter_results: List[Tuple[str, float, int, int]],
+        sliding_results: List[Tuple[str, float, int, int]],
+    ) -> List[Tuple[str, float, int, int]]:
         """
         Use majority voting: if both agree, use that word.
         If they disagree, include both but mark disagreements.
+
+        NOTE: This strategy doesn't use temporal information optimally.
+        Consider using 'max_confidence' strategy instead for better temporal awareness.
         """
         combined = []
 
-        seg_map = {word: conf for word, conf in segmenter_results}
-        slide_map = {word: conf for word, conf in sliding_results}
+        # Build maps with temporal info
+        seg_map = {word: (conf, start, end) for word, conf, start, end in segmenter_results}
+        slide_map = {word: (conf, start, end) for word, conf, start, end in sliding_results}
 
         # Find agreements
         agreements = set(seg_map.keys()) & set(slide_map.keys())
 
         for word in agreements:
             self.stats['agreements'] += 1
+            seg_conf, seg_start, seg_end = seg_map[word]
+            slide_conf, slide_start, slide_end = slide_map[word]
             # Average confidence with boost for agreement
-            avg_conf = (seg_map[word] + slide_map[word]) / 2
+            avg_conf = (seg_conf + slide_conf) / 2
             boosted_conf = min(1.0, avg_conf + self.agreement_boost)
-            combined.append((word, boosted_conf))
+            # Use temporal boundaries from higher-confidence detection
+            if seg_conf > slide_conf:
+                combined.append((word, boosted_conf, seg_start, seg_end))
+            else:
+                combined.append((word, boosted_conf, slide_start, slide_end))
 
         # For disagreements, include the one with higher confidence
-        # Only if confidence difference is significant
         seg_only = set(seg_map.keys()) - agreements
         slide_only = set(slide_map.keys()) - agreements
 
         for word in seg_only:
+            seg_conf, seg_start, seg_end = seg_map[word]
             # Check if there's a competing word from sliding window
             if slide_only:
-                max_slide_conf = max(slide_map.get(w, 0) for w in slide_only)
-                if seg_map[word] > max_slide_conf + self.confidence_threshold:
+                max_slide_conf = max(slide_map.get(w, (0, 0, 0))[0] for w in slide_only)
+                if seg_conf > max_slide_conf + self.confidence_threshold:
                     self.stats['segmenter_wins'] += 1
-                    combined.append((word, seg_map[word]))
+                    combined.append((word, seg_conf, seg_start, seg_end))
                 else:
                     self.stats['disagreements'] += 1
             else:
                 self.stats['segmenter_wins'] += 1
-                combined.append((word, seg_map[word]))
+                combined.append((word, seg_conf, seg_start, seg_end))
 
         for word in slide_only:
+            slide_conf, slide_start, slide_end = slide_map[word]
             # Check if there's a competing word from segmenter
             if seg_only:
-                max_seg_conf = max(seg_map.get(w, 0) for w in seg_only)
-                if slide_map[word] > max_seg_conf + self.confidence_threshold:
+                max_seg_conf = max(seg_map.get(w, (0, 0, 0))[0] for w in seg_only)
+                if slide_conf > max_seg_conf + self.confidence_threshold:
                     self.stats['sliding_wins'] += 1
-                    combined.append((word, slide_map[word]))
+                    combined.append((word, slide_conf, slide_start, slide_end))
                 else:
                     self.stats['disagreements'] += 1
             else:
                 self.stats['sliding_wins'] += 1
-                combined.append((word, slide_map[word]))
+                combined.append((word, slide_conf, slide_start, slide_end))
 
         self.stats['total_detections'] += len(combined)
+
+        # Sort by start frame
+        combined.sort(key=lambda x: x[2])
         return combined
 
     def _combine_segmenter_primary(
         self,
-        segmenter_results: List[Tuple[str, float]],
-        sliding_results: List[Tuple[str, float]],
-    ) -> List[Tuple[str, float]]:
+        segmenter_results: List[Tuple[str, float, int, int]],
+        sliding_results: List[Tuple[str, float, int, int]],
+    ) -> List[Tuple[str, float, int, int]]:
         """
         Prefer segmenter results unless confidence is too low,
         then fall back to sliding window.
         """
         combined = []
 
-        for word, conf in segmenter_results:
+        for word, conf, start, end in segmenter_results:
             if conf >= settings.SLIDING_WINDOW_MIN_CONFIDENCE:
                 self.stats['segmenter_wins'] += 1
-                combined.append((word, conf))
+                combined.append((word, conf, start, end))
             else:
                 # Segmenter confidence too low, check sliding window
                 slide_detection = next(
-                    ((w, c) for w, c in sliding_results if w == word),
+                    ((w, c, s, e) for w, c, s, e in sliding_results if w == word),
                     None
                 )
                 if slide_detection:
                     self.stats['agreements'] += 1
                     # Use sliding window confidence with small boost
                     boosted_conf = min(1.0, slide_detection[1] + 0.05)
-                    combined.append((word, boosted_conf))
+                    combined.append((word, boosted_conf, slide_detection[2], slide_detection[3]))
 
         # Add sliding window detections not in segmenter results
-        seg_words = {word for word, _ in segmenter_results}
-        for word, conf in sliding_results:
+        seg_words = {word for word, _, _, _ in segmenter_results}
+        for word, conf, start, end in sliding_results:
             if word not in seg_words:
                 self.stats['sliding_wins'] += 1
-                combined.append((word, conf))
+                combined.append((word, conf, start, end))
 
         self.stats['total_detections'] += len(combined)
         return combined
 
     def _combine_sliding_primary(
         self,
-        segmenter_results: List[Tuple[str, float]],
-        sliding_results: List[Tuple[str, float]],
-    ) -> List[Tuple[str, float]]:
+        segmenter_results: List[Tuple[str, float, int, int]],
+        sliding_results: List[Tuple[str, float, int, int]],
+    ) -> List[Tuple[str, float, int, int]]:
         """
         Prefer sliding window results unless confidence is too low,
         then fall back to segmenter.
         """
         combined = []
 
-        for word, conf in sliding_results:
+        for word, conf, start, end in sliding_results:
             if conf >= settings.SLIDING_WINDOW_MIN_CONFIDENCE:
                 self.stats['sliding_wins'] += 1
-                combined.append((word, conf))
+                combined.append((word, conf, start, end))
             else:
                 # Sliding confidence too low, check segmenter
                 seg_detection = next(
-                    ((w, c) for w, c in segmenter_results if w == word),
+                    ((w, c, s, e) for w, c, s, e in segmenter_results if w == word),
                     None
                 )
                 if seg_detection:
                     self.stats['agreements'] += 1
                     # Use segmenter confidence with small boost
                     boosted_conf = min(1.0, seg_detection[1] + 0.05)
-                    combined.append((word, boosted_conf))
+                    combined.append((word, boosted_conf, seg_detection[2], seg_detection[3]))
 
         # Add segmenter detections not in sliding window results
-        slide_words = {word for word, _ in sliding_results}
-        for word, conf in segmenter_results:
+        slide_words = {word for word, _, _, _ in sliding_results}
+        for word, conf, start, end in segmenter_results:
             if word not in slide_words:
                 self.stats['segmenter_wins'] += 1
-                combined.append((word, conf))
+                combined.append((word, conf, start, end))
 
         self.stats['total_detections'] += len(combined)
         return combined
@@ -304,6 +347,72 @@ class HybridDetector:
 
         return intersection / union
 
+    def _deduplicate_by_word_with_temporal(
+        self,
+        detections: List[Tuple[str, float, int, int]],
+        strategy: str = None
+    ) -> List[Tuple[str, float, int, int]]:
+        """
+        Remove duplicate detections of same word with temporal overlap.
+
+        Only removes duplicates if:
+        1. Same word
+        2. Temporal overlap (IoU > threshold)
+
+        This allows same word to appear twice if they're temporally separated.
+
+        Args:
+            detections: List of (word, confidence, start_frame, end_frame) tuples
+            strategy: Deduplication strategy ('max_confidence', 'first', 'merge')
+
+        Returns:
+            Deduplicated list preserving temporal order
+        """
+        if not settings.HYBRID_WORD_DEDUP_ENABLED:
+            return detections
+
+        if len(detections) <= 1:
+            return detections
+
+        strategy = strategy or settings.HYBRID_DEDUP_STRATEGY
+        deduplicated = []
+
+        for i, (word, conf, start, end) in enumerate(detections):
+            # Check if this detection overlaps with any already in deduplicated
+            overlaps_existing = False
+
+            for j, (prev_word, prev_conf, prev_start, prev_end) in enumerate(deduplicated):
+                if word == prev_word:
+                    # Same word - check temporal overlap
+                    iou = self._calculate_temporal_iou(start, end, prev_start, prev_end)
+
+                    if iou > settings.HYBRID_OVERLAP_THRESHOLD:
+                        # Overlapping duplicate - handle according to strategy
+                        overlaps_existing = True
+
+                        if strategy == 'max_confidence':
+                            if conf > prev_conf:
+                                # Replace with higher confidence detection
+                                deduplicated[j] = (word, conf, start, end)
+
+                        elif strategy == 'merge':
+                            # Average confidence, merge temporal boundaries
+                            merged_conf = (conf + prev_conf) / 2.0
+                            merged_start = min(start, prev_start)
+                            merged_end = max(end, prev_end)
+                            deduplicated[j] = (word, merged_conf, merged_start, merged_end)
+
+                        # 'first' strategy: do nothing, keep existing
+                        break
+
+            if not overlaps_existing:
+                # No temporal overlap with existing - add as new detection
+                deduplicated.append((word, conf, start, end))
+
+        # Re-sort after deduplication
+        deduplicated.sort(key=lambda x: x[2])
+        return deduplicated
+
     def _deduplicate_by_word(
         self,
         detections: List[Tuple[str, float]],
@@ -311,6 +420,8 @@ class HybridDetector:
     ) -> List[Tuple[str, float]]:
         """
         Remove duplicate detections of same word.
+
+        DEPRECATED: Use _deduplicate_by_word_with_temporal for temporal-aware deduplication.
 
         Args:
             detections: List of (word, confidence) tuples

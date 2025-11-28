@@ -38,6 +38,8 @@ class WordSegmenter:
 
         # Track total frames for temporal position
         self.total_frames_processed = 0
+        # Track start of current segment being built
+        self.segment_start_frame = 0
 
     # -------------------------------------------------------
 
@@ -46,7 +48,7 @@ class WordSegmenter:
         frame_vec: (F,)
         Returns:
             None
-            or np.ndarray(T, F) — completed word
+            or tuple: (np.ndarray(T, F), start_frame, end_frame) — completed word with temporal info
         """
         # Increment frame counter
         self.total_frames_processed += 1
@@ -55,6 +57,7 @@ class WordSegmenter:
         if self.prev_frame is None:
             self.prev_frame = frame_vec
             self.buffer.append(frame_vec)
+            self.segment_start_frame = self.total_frames_processed - 1
             return None
 
         # Movement magnitude
@@ -85,6 +88,9 @@ class WordSegmenter:
             self.silence_count += 1
         else:
             self.silence_count = 0
+            # Reset segment start on significant movement
+            if self.silence_count == 0 and len(self.buffer) <= self.silence_frames:
+                self.segment_start_frame = self.total_frames_processed - len(self.buffer)
 
         # Update for next frame
         self.prev_movement = movement
@@ -101,19 +107,28 @@ class WordSegmenter:
             if len(word_frames) < self.min_word_frames:
                 # keep only the last silent frames in buffer
                 self.buffer = self.buffer[-self.silence_frames:]
+                # Update segment start for next potential word
+                self.segment_start_frame = self.total_frames_processed - len(self.buffer)
                 return None
 
             # Extract word to return
             word_frames_np = np.array(word_frames, dtype=np.float32)
 
+            # Calculate temporal boundaries
+            segment_end_frame = self.total_frames_processed - self.silence_frames - 1
+            start_frame = self.segment_start_frame
+            end_frame = segment_end_frame
+
             # Reset buffer (keep silence tail)
             self.buffer = self.buffer[-self.silence_frames:]
+            # Update segment start for next word
+            self.segment_start_frame = self.total_frames_processed - len(self.buffer)
 
-            return word_frames_np
+            return (word_frames_np, start_frame, end_frame)
 
         return None
 
-    def flush_buffer(self, min_frames: int = None) -> np.ndarray:
+    def flush_buffer(self, min_frames: int = None):
         """
         Force emission of buffered content (for end of batch/session).
 
@@ -121,7 +136,7 @@ class WordSegmenter:
             min_frames: Minimum frames required to flush (default from config)
 
         Returns:
-            np.ndarray of buffered frames, or None if buffer too small
+            None or tuple: (np.ndarray, start_frame, end_frame) — buffered frames with temporal info
         """
         min_frames = min_frames or settings.MIN_FRAMES_FOR_FLUSH
 
@@ -131,10 +146,16 @@ class WordSegmenter:
         # Emit entire buffer (don't trim silence - it's the end!)
         word_frames_np = np.array(self.buffer, dtype=np.float32)
 
+        # Calculate temporal boundaries
+        start_frame = self.segment_start_frame
+        end_frame = self.total_frames_processed - 1
+
         # Clear buffer
         self.buffer = []
+        # Update segment start for potential next word
+        self.segment_start_frame = self.total_frames_processed
 
-        return word_frames_np
+        return (word_frames_np, start_frame, end_frame)
 
     def add_frame_with_alternatives(self, frame_vec: np.ndarray):
         """

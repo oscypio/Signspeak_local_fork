@@ -103,6 +103,18 @@ class PipelineManager:
                     detected_words.append(result)
 
         # ====================================================
+        # 2b) FLUSH BUFFER - Emit last word at batch end
+        # ====================================================
+        if settings.FORCE_FLUSH_ON_BATCH_END:
+            flushed_result = self.sliding_detector.flush_buffer(
+                self.classifier, self.preparer
+            )
+            if flushed_result is not None:
+                word, confidence = flushed_result
+                print(f"[SLIDING FLUSH] Emitting last tracked word: {word} (conf={confidence:.2f})")
+                detected_words.append((word, confidence))
+
+        # ====================================================
         # 3) Process detected words
         # ====================================================
         for word, confidence in detected_words:
@@ -152,7 +164,7 @@ class PipelineManager:
         # ====================================================
         # 2) Feed each frame into segmenter
         # ====================================================
-        segments = []
+        segments = []  # Will store (segment_data, start_frame, end_frame)
         if settings.USE_SEGMENTATOR:
 
             for vec in seq:
@@ -160,24 +172,22 @@ class PipelineManager:
                     segs = self.segmenter.add_frame_with_alternatives(vec)
                     if segs is not None:
                         # segs is a list of np.ndarrays (variants for one detected word)
-                        segments.append(segs)
+                        # For alternatives mode, we don't have temporal info yet
+                        segments.append((segs, None, None))
                 else:
-                    segment = self.segmenter.add_frame(vec)
-                    if segment is not None:
-                        segments.append(segment)
-
-            if not segments:
-                print("No segments found")
-                return [generate_no_word_response()]
-
-            print(f"Detected {len(segments)} segments.")
+                    result = self.segmenter.add_frame(vec)
+                    if result is not None:
+                        # result is (segment_np, start_frame, end_frame)
+                        segments.append(result)
 
             # ====================================================
             # 2b) FLUSH BUFFER - Emit remaining content at batch end
             # ====================================================
             if settings.FORCE_FLUSH_ON_BATCH_END:
-                flushed_segment = self.segmenter.flush_buffer()
-                if flushed_segment is not None:
+                flushed_result = self.segmenter.flush_buffer()
+                if flushed_result is not None:
+                    # flushed_result is (segment_np, start_frame, end_frame)
+                    flushed_segment, start_f, end_f = flushed_result
                     # Classify the flushed segment
                     prepared = self.preparer.prepare_resampled(flushed_segment)
                     proba_dict = self.classifier.predict_proba(prepared)
@@ -186,14 +196,19 @@ class PipelineManager:
 
                     # Add to segments if confidence acceptable
                     if confidence >= settings.FLUSH_MIN_CONFIDENCE:
-                        print(f"[FLUSH] Emitting buffered segment: {word} (conf={confidence:.2f})")
+                        print(f"[FLUSH] Emitting buffered segment: {word} (conf={confidence:.2f}, frames={start_f}-{end_f})")
                         # Wrap in list for SEGMENTER_RETURN_ALTERNATIVES compatibility
                         if settings.SEGMENTER_RETURN_ALTERNATIVES:
-                            segments.append([flushed_segment])
+                            segments.append(([flushed_segment], start_f, end_f))
                         else:
-                            segments.append(flushed_segment)
+                            segments.append((flushed_segment, start_f, end_f))
         else:
-            segments.append(seq)
+            segments.append((seq, 0, len(seq) - 1))
+
+        print(f"Detected {len(segments)} segments.")
+        if not segments:
+            print("No segments found")
+            return [generate_no_word_response()]
 
         # ====================================================
         # 3) Predict label for each detected word segment
@@ -201,21 +216,16 @@ class PipelineManager:
         responses = []
 
         for segment_item in segments:
-
-            # If using alternative segments, segment_item is list of variants
-            if settings.USE_SEGMENTATOR and settings.SEGMENTER_RETURN_ALTERNATIVES:
-
+            # Extract segment data and temporal info
+            if settings.SEGMENTER_RETURN_ALTERNATIVES:
+                segment_data, start_f, end_f = segment_item
                 # Delegate selection of best label to classifier
-                cand_list = [self.preparer.prepare_resampled(cand) for cand in segment_item]
-
+                cand_list = [self.preparer.prepare_resampled(cand) for cand in segment_data]
                 word = self.classifier.predict_best_from_candidates(cand_list)
-
             else:
-                segment_np = segment_item
-
+                segment_np, start_f, end_f = segment_item
                 # 1. generate TTA variants
                 tta_variants = self.preparer.prepare_tta_segments(segment_np, n_augs=7)
-
                 # 2. predict using majority vote
                 word = self.classifier.predict_tta(tta_variants)
 
@@ -223,11 +233,10 @@ class PipelineManager:
             # 4) Special symbol -> end of sentence
             # ====================================================
             if word == settings.SPECIAL_LABEL:
-
                 final_sentence = " ".join(self.word_buffer)
                 self.word_buffer.clear()
                 final_sentence = self.polisher.polish(final_sentence)
-
+                self.segmenter.reset()
                 self.sentence_buffer.append(final_sentence)
                 responses.append(generate_end_of_sentence_response(final_sentence))
                 continue
@@ -236,9 +245,8 @@ class PipelineManager:
             # 5) Normal word -> add to buffer
             # ====================================================
             self.word_buffer.append(word)
-
             responses.append(generate_given_word_response(word, self.word_buffer))
-        self.segmenter.reset()
+
         return_val = responses if settings.USE_SEGMENTATOR else [responses[-1]]
         return return_val
 
@@ -263,56 +271,64 @@ class PipelineManager:
         # ====================================================
         # 2a) Run sliding window detector
         # ====================================================
-        sliding_results = []
+        sliding_results = []  # Will store (word, confidence, start_frame, end_frame)
         if settings.SLIDING_WINDOW_BATCH_PREDICT:
-            sliding_results = self.sliding_detector.add_frames_batch_optimized(
+            sliding_detections = self.sliding_detector.add_frames_batch_optimized(
                 list(seq), self.classifier, self.preparer
             )
+            # Convert to format with temporal info (sliding detector doesn't provide it yet)
+            for word, confidence in sliding_detections:
+                sliding_results.append((word, confidence, 0, len(seq) - 1))
         else:
             for vec in seq:
                 result = self.sliding_detector.add_frame(
                     vec, self.classifier, self.preparer
                 )
                 if result is not None:
-                    sliding_results.append(result)
+                    word, confidence = result
+                    sliding_results.append((word, confidence, 0, len(seq) - 1))
 
         # ====================================================
         # 2b) Run traditional segmenter
         # ====================================================
-        segmenter_results = []
-        segments = []
+        segmenter_results = []  # Will store (word, confidence, start_frame, end_frame)
+        segments = []  # Will store segment data with temporal info
 
         if settings.USE_SEGMENTATOR:
             for vec in seq:
                 if settings.SEGMENTER_RETURN_ALTERNATIVES:
                     segs = self.segmenter.add_frame_with_alternatives(vec)
                     if segs is not None:
-                        segments.append(segs)
+                        # For alternatives, we don't have temporal info in this mode
+                        segments.append((segs, None, None))
                 else:
-                    segment = self.segmenter.add_frame(vec)
-                    if segment is not None:
-                        segments.append(segment)
+                    result = self.segmenter.add_frame(vec)
+                    if result is not None:
+                        # result is (segment_np, start_frame, end_frame)
+                        segments.append(result)
 
             # Classify segmenter detections
             for segment_item in segments:
                 if settings.SEGMENTER_RETURN_ALTERNATIVES:
+                    segment_data, start_f, end_f = segment_item
                     # Use alternatives for better accuracy
-                    cand_list = [self.preparer.prepare_resampled(cand) for cand in segment_item]
+                    cand_list = [self.preparer.prepare_resampled(cand) for cand in segment_data]
                     word = self.classifier.predict_best_from_candidates(cand_list)
                     # Get confidence from best candidate
                     proba_dicts = self.classifier.predict_proba_batch(cand_list)
                     confidences = [max(proba.values()) for proba in proba_dicts]
                     confidence = max(confidences)
+                    # Use placeholder temporal info for alternatives mode
+                    segmenter_results.append((word, confidence, 0, len(seq) - 1))
                 else:
-                    # Standard TTA approach
-                    segment_np = segment_item
+                    # Standard TTA approach with temporal info
+                    segment_np, start_f, end_f = segment_item
                     tta_variants = self.preparer.prepare_tta_segments(segment_np, n_augs=7)
                     word = self.classifier.predict_tta(tta_variants)
                     # Get confidence from TTA
                     proba_dict = self.classifier.predict_proba(self.preparer.prepare_resampled(segment_np))
                     confidence = proba_dict.get(word, 0.5)
-
-                segmenter_results.append((word, confidence))
+                    segmenter_results.append((word, confidence, start_f, end_f))
 
         # ====================================================
         # 2c) FLUSH BUFFERS - Emit remaining content at batch end
@@ -320,31 +336,27 @@ class PipelineManager:
         if settings.FORCE_FLUSH_ON_BATCH_END:
             # Flush segmenter buffer
             if settings.USE_SEGMENTATOR:
-                flushed_segment = self.segmenter.flush_buffer()
-                if flushed_segment is not None:
-                    # Classify the flushed segment
-                    if settings.SEGMENTER_RETURN_ALTERNATIVES:
-                        # Generate alternatives for flushed content
-                        prepared = self.preparer.prepare_resampled(flushed_segment)
-                        word = self.classifier.predict_label(prepared)
-                        proba_dict = self.classifier.predict_proba(prepared)
-                        confidence = proba_dict.get(word, 0.5)
-                    else:
-                        prepared = self.preparer.prepare_resampled(flushed_segment)
-                        word = self.classifier.predict_label(prepared)
-                        proba_dict = self.classifier.predict_proba(prepared)
-                        confidence = proba_dict.get(word, 0.5)
+                flushed_result = self.segmenter.flush_buffer()
+                if flushed_result is not None:
+                    flushed_segment, start_f, end_f = flushed_result
+                    # Classify the flushed segment (unified code - no duplication)
+                    prepared = self.preparer.prepare_resampled(flushed_segment)
+                    word = self.classifier.predict_label(prepared)
+                    proba_dict = self.classifier.predict_proba(prepared)
+                    confidence = proba_dict.get(word, 0.5)
 
                     # Add to segmenter results if confidence is acceptable
                     if confidence >= settings.FLUSH_MIN_CONFIDENCE:
-                        segmenter_results.append((word, confidence))
+                        print(f"[FLUSH] Emitting buffered segment: {word} (conf={confidence:.2f}, frames={start_f}-{end_f})")
+                        segmenter_results.append((word, confidence, start_f, end_f))
 
             # Flush sliding window buffer
             flushed_sliding = self.sliding_detector.flush_buffer(
                 self.classifier, self.preparer
             )
             if flushed_sliding is not None:
-                sliding_results.append(flushed_sliding)
+                word, confidence = flushed_sliding
+                sliding_results.append((word, confidence, 0, len(seq) - 1))
 
         # ====================================================
         # 3) Combine results using hybrid detector
@@ -354,11 +366,16 @@ class PipelineManager:
         )
 
         # ====================================================
+        # 3b) Sort combined results by start frame to preserve temporal order
+        # ====================================================
+        combined_results.sort(key=lambda x: x[2])  # Sort by start_frame (index 2)
+
+        # ====================================================
         # 4) Process combined detections
         # ====================================================
         responses = []
 
-        for word, confidence in combined_results:
+        for word, confidence, start_f, end_f in combined_results:
             # Special symbol -> end of sentence
             if word == settings.SPECIAL_LABEL:
                 final_sentence = " ".join(self.word_buffer)
@@ -375,13 +392,14 @@ class PipelineManager:
         # If no words detected, return no-word response
         if not responses:
             return [generate_no_word_response()]
-        self.segmenter.reset()
+
+        # NO RESET HERE - let buffer persist for next batch
         return responses
 
     def force_end_sentence(self) -> Dict[str, Any]:
         """Force sentence finalization as if SPECIAL_LABEL was predicted."""
         final_sentence = " ".join(self.word_buffer)
-        self.word_buffer.clear()
+        self.reset_buffer()
         # Polish sentence
         final_sentence = self.polisher.polish(final_sentence)
         self.sentence_buffer.append(final_sentence)
@@ -391,5 +409,7 @@ class PipelineManager:
     def reset_buffer(self):
         """Reset internal word buffer and detector state."""
         self.word_buffer.clear()
+        if settings.USE_SEGMENTATOR:
+            self.segmenter.reset()
         if settings.USE_SLIDING_WINDOW:
             self.sliding_detector.reset()

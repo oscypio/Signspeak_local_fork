@@ -63,35 +63,54 @@ def load_pkl_to_frames(pkl_path: str) -> List[Dict[str, Any]]:
 
 
 def extract_texts_from_resp(resp: Any) -> List[str]:
+    """
+    Extract all text predictions from API response.
+    For SignSpeak-ML API, this includes:
+    - 'prediction' fields (individual words)
+    - 'sentence' fields (completed sentences)
+    - 'current_words' lists (accumulated words)
+    """
     texts = []
+
     if isinstance(resp, dict):
+        # Check for 'results' list (standard SignSpeak-ML format)
+        res = resp.get('results')
+        if isinstance(res, list):
+            for item in res:
+                if isinstance(item, dict):
+                    # Extract 'prediction' (individual word)
+                    pred = item.get('prediction')
+                    if isinstance(pred, str) and pred.strip():
+                        texts.append(pred.strip())
+
+                    # Extract 'sentence' (completed sentence from end_of_sentence status)
+                    sent = item.get('sentence')
+                    if isinstance(sent, str) and sent.strip():
+                        texts.append(sent.strip())
+
+                    # Extract from 'current_words' list
+                    curr = item.get('current_words')
+                    if isinstance(curr, list):
+                        for w in curr:
+                            if isinstance(w, str) and w.strip():
+                                texts.append(w.strip())
+                    elif isinstance(curr, str) and curr.strip():
+                        texts.append(curr.strip())
+
+        # Fallback: check top-level keys
         for key in ("sentence", "text", "transcription", "prediction", "predicted_text", "decoded"):
             v = resp.get(key)
             if isinstance(v, str) and v.strip():
                 texts.append(v.strip())
 
-        res = resp.get('results')
-        if isinstance(res, str) and res.strip():
-            texts.append(res.strip())
-        elif isinstance(res, list):
-            for item in res:
-                if isinstance(item, str) and item.strip():
-                    texts.append(item.strip())
-                elif isinstance(item, dict):
-                    for key in ("sentence", "text", "label", "prediction", "transcription"):
-                        vv = item.get(key)
-                        if isinstance(vv, str) and vv.strip():
-                            texts.append(vv.strip())
-        elif isinstance(res, dict):
-            for key in ("sentence", "text", "transcription", "prediction"):
-                vv = res.get(key)
-                if isinstance(vv, str) and vv.strip():
-                    texts.append(vv.strip())
-
     elif isinstance(resp, list):
         for item in resp:
             if isinstance(item, str) and item.strip():
                 texts.append(item.strip())
+            elif isinstance(item, dict):
+                # Recursively extract from dict items
+                sub_texts = extract_texts_from_resp(item)
+                texts.extend(sub_texts)
 
     elif isinstance(resp, str) and resp.strip():
         texts.append(resp.strip())
@@ -163,28 +182,61 @@ def evaluate_pkl_dir(pkl_dir: str,
         # Extract textual outputs
         texts = extract_texts_from_resp(resp)
 
-        # Prefer explicit 'sentence' if present anywhere in the JSON response
+        # Extract sentence from response (prefer 'sentence' from end_of_sentence status)
         sentence_from_json = ""
+        predictions_list = []
+        final_words_list = []
+        all_returned_words = []  # NEW: Track all words returned by API in order
+
         if isinstance(resp, dict):
-            # top-level
-            s_top = resp.get('sentence')
-            if isinstance(s_top, str) and s_top.strip():
-                sentence_from_json = s_top.strip()
-            else:
-                res = resp.get('results')
-                # if results is dict, consider its 'sentence'
-                if isinstance(res, dict):
-                    s_res = res.get('sentence')
-                    if isinstance(s_res, str) and s_res.strip():
-                        sentence_from_json = s_res.strip()
-                # if results is list, search all elements for 'sentence' field
-                elif isinstance(res, list):
-                    for itm in res:
-                        if isinstance(itm, dict):
+            res = resp.get('results')
+            if isinstance(res, list):
+                # Search for 'sentence' in objects with status='end_of_sentence'
+                for itm in res:
+                    if isinstance(itm, dict):
+                        status = itm.get('status', '')
+
+                        # Priority 1: sentence from end_of_sentence
+                        if status == 'end_of_sentence':
                             s_itm = itm.get('sentence')
                             if isinstance(s_itm, str) and s_itm.strip():
                                 sentence_from_json = s_itm.strip()
-                                break
+                                # Don't break - continue collecting all words
+
+                        # Collect predictions for fallback AND for all_returned_words
+                        pred = itm.get('prediction')
+                        if isinstance(pred, str) and pred.strip():
+                            word = pred.strip()
+                            predictions_list.append(word)
+                            # Add to all_returned_words if not SPECIAL_LABEL (unless it's end_of_sentence)
+                            if status != 'end_of_sentence':
+                                all_returned_words.append(word)
+
+                        # Collect current_words from last item
+                        curr = itm.get('current_words')
+                        if isinstance(curr, list):
+                            final_words_list = [str(w).strip() for w in curr if str(w).strip()]
+
+                # Priority 2: if no sentence, build from last current_words
+                if not sentence_from_json and final_words_list:
+                    sentence_from_json = " ".join(final_words_list)
+
+                # Priority 3: if no current_words, build from predictions
+                if not sentence_from_json and predictions_list:
+                    sentence_from_json = " ".join(predictions_list)
+
+            # Fallback: top-level sentence
+            if not sentence_from_json:
+                s_top = resp.get('sentence')
+                if isinstance(s_top, str) and s_top.strip():
+                    sentence_from_json = s_top.strip()
+
+        # If no words collected from results, use final_words_list or predictions_list
+        if not all_returned_words:
+            if final_words_list:
+                all_returned_words = final_words_list
+            elif predictions_list:
+                all_returned_words = predictions_list
 
         # Build normalized response words for matching (uppercase alnum tokens)
         response_words: List[str] = []
@@ -213,6 +265,7 @@ def evaluate_pkl_dir(pkl_dir: str,
             'found_texts': texts,
             'returned_sentence': returned_sentence,
             'response_words': response_words,
+            'all_returned_words': all_returned_words,  # NEW: Add all returned words to stats
             'response_time_s': elapsed,
             'detected_words_count': len(response_words),
             'matches': matches,
@@ -221,6 +274,15 @@ def evaluate_pkl_dir(pkl_dir: str,
             'precision': precision,
             'f1': f1,
         })
+
+        # NEW: Reset buffer after each file to ensure clean state for next test
+        try:
+            reset_resp = http_post_json(reset_url, {}, timeout=5.0)
+            if print_summary:
+                print(f"  → Buffer reset for next file")
+        except Exception as e:
+            if print_summary:
+                print(f"  → Warning: Failed to reset buffer: {e}")
 
     # Aggregate statistics only over successful entries
     total = len(per_file_stats)
@@ -251,7 +313,10 @@ def evaluate_pkl_dir(pkl_dir: str,
             if 'error' in p:
                 print(f"- {p['file']}: ERROR: {p['error']}")
             else:
-                print(f"- {p['file']}: time={p.get('response_time_s'):.3f}s, matches={p.get('matches')}, extras={p.get('extras')}, returned='{p.get('returned_sentence')}'")
+                words_str = ' '.join(p.get('all_returned_words', [])) if p.get('all_returned_words') else '(none)'
+                print(f"- {p['file']}: time={p.get('response_time_s'):.3f}s, matches={p.get('matches')}, extras={p.get('extras')}")
+                print(f"    returned_words: [{words_str}]")
+                print(f"    returned_sentence: '{p.get('returned_sentence')}'")
         print('\n=== Aggregated (successful requests) ===')
         print(f"Successful: {success_count}/{total}, avg_time_s: {avg_time:.3f}, avg_recall: {avg_recall:.3f}, avg_precision: {avg_precision:.3f}, avg_f1: {avg_f1:.3f}")
 
