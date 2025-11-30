@@ -379,9 +379,9 @@ def run_demo(pkl_path: str, window_size: int, stride: int, drop_incomplete: bool
         for i, (win_idx, text, wc) in enumerate(collected_sentences, start=1):
             print(f"{i}. (window {win_idx}) [{wc} words] {text}")
             total_words += wc
-        print(f"Total sentences: {len(collected_sentences)}, total words: {total_words}")
+        print(f"Total responses: {len(collected_sentences)}, total words: {total_words}")
     else:
-        print("No sentences collected from predictions.")
+        print("No responses collected from predictions.")
 
     # --- Print timing summaries for special events ---
     def _print_time_stats(name: str, times: List[float]):

@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     USE_SLIDING_WINDOW: bool = os.getenv('USE_SLIDING_WINDOW', False)
 
     # Window size for sliding window (should match EXPECTED_FRAMES)
-    SLIDING_WINDOW_SIZE: int = int(os.getenv('SLIDING_WINDOW_SIZE', 70))
+    SLIDING_WINDOW_SIZE: int = int(os.getenv('SLIDING_WINDOW_SIZE', 60))
 
     # Stride between consecutive windows (lower = more overlap, higher accuracy but slower)
     SLIDING_WINDOW_STRIDE: int = int(os.getenv('SLIDING_WINDOW_STRIDE', 10))
@@ -69,24 +69,24 @@ class Settings(BaseSettings):
     SLIDING_WINDOW_STABILITY_COUNT: int = int(os.getenv('SLIDING_WINDOW_STABILITY_COUNT', 3))
 
     # Minimum confidence threshold to accept a prediction
-    SLIDING_WINDOW_MIN_CONFIDENCE: float = float(os.getenv('SLIDING_WINDOW_MIN_CONFIDENCE', 0.6))
+    SLIDING_WINDOW_MIN_CONFIDENCE: float = float(os.getenv('SLIDING_WINDOW_MIN_CONFIDENCE', 0.85))
 
     # Maximum buffer size (frames to keep in memory)
-    SLIDING_WINDOW_MAX_BUFFER: int = int(os.getenv('SLIDING_WINDOW_MAX_BUFFER', 800))
+    SLIDING_WINDOW_MAX_BUFFER: int = int(os.getenv('SLIDING_WINDOW_MAX_BUFFER', 120))
 
     # Use batch prediction for sliding windows (recommended for performance)
     SLIDING_WINDOW_BATCH_PREDICT: bool = os.getenv('SLIDING_WINDOW_BATCH_PREDICT', True)
 
     # ===== HYBRID MODE =====
     # Use both segmenter and sliding window, combine results intelligently
-    USE_HYBRID_MODE: bool = os.getenv('USE_HYBRID_MODE', True)
+    USE_HYBRID_MODE: bool = os.getenv('USE_HYBRID_MODE', False)
 
     # Strategy for combining segmenter and sliding window results:
     # - 'max_confidence': Choose detection with highest confidence
     # - 'voting': Use majority voting if both detect same word
     # - 'segmenter_primary': Use sliding window only if segmenter has low confidence
     # - 'sliding_primary': Use segmenter only if sliding window has low confidence
-    HYBRID_STRATEGY: str = os.getenv('HYBRID_STRATEGY', 'max_confidence')
+    HYBRID_STRATEGY: str = os.getenv('HYBRID_STRATEGY', 'segmenter_primary')
 
     # Minimum confidence difference to prefer one method over another
     HYBRID_CONFIDENCE_THRESHOLD: float = float(os.getenv('HYBRID_CONFIDENCE_THRESHOLD', 0.1))
@@ -116,13 +116,18 @@ class Settings(BaseSettings):
 
     # ===== BUFFER FLUSH =====
     # Force emission of buffered content when batch ends (prevents losing last word)
-    FORCE_FLUSH_ON_BATCH_END: bool = os.getenv('FORCE_FLUSH_ON_BATCH_END', True)
+    FORCE_FLUSH_ON_BATCH_END: bool = True
 
     # Minimum frames in buffer to force flush (prevents flushing noise)
-    MIN_FRAMES_FOR_FLUSH: int = int(os.getenv('MIN_FRAMES_FOR_FLUSH', 20))
+    MIN_FRAMES_FOR_FLUSH: int = 20
 
     # Minimum confidence for forced flush (lower than normal to catch uncertain words)
-    FLUSH_MIN_CONFIDENCE: float = float(os.getenv('FLUSH_MIN_CONFIDENCE', 0.4))
+    FLUSH_MIN_CONFIDENCE: float = 0.4
+
+    # ===== WORD DETECTION THRESHOLD =====
+    # Minimum confidence required to emit a detected word (0.0 - 1.0)
+    # Words below this threshold are ignored (no response)
+    MIN_CONFIDENCE_THRESHOLD: float = os.getenv('MIN_CONFIDENCE_THRESHOLD', 0.7)
 
 
 settings = Settings()

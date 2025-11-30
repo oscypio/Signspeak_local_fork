@@ -72,7 +72,8 @@ class SlidingWindowDetector:
         self.total_frames_processed: int = 0
 
         # Cooldown: prevent emitting same word too quickly
-        self.cooldown_frames: int = window_size // 3  # Allow faster repetitions (was // 2)
+        # Use larger cooldown for batch processing (prevent detecting same word multiple times in one batch)
+        self.cooldown_frames: int = max(window_size // 2, 30)  # At least 30 frames or half window
 
     def reset(self):
         """Reset detector state (useful between sentences or sessions)"""
@@ -136,6 +137,35 @@ class SlidingWindowDetector:
         Returns:
             None if no word detected, or (word, confidence) tuple if word is ready
         """
+        # Check if frame is "empty" (no hands detected - all zeros or very low values)
+        frame_magnitude = float(np.linalg.norm(frame_vec))
+        is_empty_frame = frame_magnitude < 0.01  # Threshold for "no hand detected"
+
+        # Track consecutive empty frames
+        if not hasattr(self, '_consecutive_empty_frames'):
+            self._consecutive_empty_frames = 0
+
+        if is_empty_frame:
+            self._consecutive_empty_frames += 1
+        else:
+            self._consecutive_empty_frames = 0
+
+        # If too many empty frames, clear buffer to prevent ghost detections
+        # This prevents detecting old gestures when hands are not visible
+        if self._consecutive_empty_frames > self.window_size:
+            print(f"[SILENCE DETECTED] Clearing buffer after {self._consecutive_empty_frames} empty frames (magnitude: {frame_magnitude:.6f})")
+            # Keep only last window_size frames to maintain some context
+            recent_frames = list(self.frame_buffer)[-min(self.window_size, len(self.frame_buffer)):] if len(self.frame_buffer) > 0 else []
+            self.frame_buffer.clear()
+            for frame in recent_frames:
+                self.frame_buffer.append(frame)
+            # Reset state completely to prevent detecting old gestures
+            self.last_predicted_word = None
+            self.consecutive_count = 0
+            self.last_predicted_confidence = 0.0
+            self._consecutive_empty_frames = 0  # Reset counter after clearing
+            return None  # Don't process this frame
+
         # Add frame to buffer
         self.frame_buffer.append(frame_vec)
         self.frames_since_last_window += 1
@@ -155,6 +185,20 @@ class SlidingWindowDetector:
         # Extract window: take last window_size frames
         window_frames = list(self.frame_buffer)[-self.window_size:]
         window_np = np.array(window_frames, dtype=np.float32)
+
+        # CHECK: Skip classification if window has too many empty frames
+        # This prevents classifying windows with MIX of old gesture frames + new empty frames
+        window_magnitudes = np.linalg.norm(window_np, axis=1)
+        non_empty_count = np.sum(window_magnitudes > 0.01)
+        empty_ratio = 1.0 - (non_empty_count / len(window_magnitudes))
+
+        # If window is mostly empty (>50% empty frames), skip classification
+        if empty_ratio > 0.5:
+            print(f"[SKIP WINDOW] Too many empty frames: {empty_ratio:.1%} empty ({non_empty_count}/{len(window_magnitudes)} non-empty)")
+            # Reset state to prevent detecting old gestures
+            self.last_predicted_word = None
+            self.consecutive_count = 0
+            return None
 
         # Prepare window for classification (resample to expected length)
         prepared_window = preparer.prepare_resampled(window_np)
@@ -194,8 +238,12 @@ class SlidingWindowDetector:
             # Emit the word!
             self.emission_history[predicted_word] = self.total_frames_processed
 
-            # Keep tracking but allow for next word
-            # Don't reset completely - let it transition naturally
+            # IMPORTANT: Reset tracking to avoid emitting same word repeatedly
+            # This forces detector to wait for new stable prediction
+            self.consecutive_count = 0
+            self.last_predicted_word = None
+            self.last_predicted_confidence = 0.0
+
             return (predicted_word, confidence)
 
         return None

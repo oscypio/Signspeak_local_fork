@@ -135,7 +135,7 @@ class PipelineManager:
             # 5) Normal word -> add to buffer
             # ====================================================
             self.word_buffer.append(word)
-            responses.append(generate_given_word_response(word, self.word_buffer))
+            responses.append(generate_given_word_response(word, self.word_buffer, confidence))
 
         # If no words detected, return no-word response
         if not responses:
@@ -194,9 +194,10 @@ class PipelineManager:
                     word = max(proba_dict.items(), key=lambda x: x[1])[0]
                     confidence = proba_dict[word]
 
-                    # Add to segments if confidence acceptable
-                    if confidence >= settings.FLUSH_MIN_CONFIDENCE:
-                        print(f"[FLUSH] Emitting buffered segment: {word} (conf={confidence:.2f}, frames={start_f}-{end_f})")
+                    # Add to segments if confidence acceptable (use stricter threshold)
+                    min_conf = max(settings.FLUSH_MIN_CONFIDENCE, settings.MIN_CONFIDENCE_THRESHOLD)
+                    if confidence >= min_conf:
+                        print(f"[FLUSH] Emitting buffered segment: {word} (conf={confidence:.2f}, min_threshold={min_conf:.2f}, frames={start_f}-{end_f})")
                         # Wrap in list for SEGMENTER_RETURN_ALTERNATIVES compatibility
                         if settings.SEGMENTER_RETURN_ALTERNATIVES:
                             segments.append(([flushed_segment], start_f, end_f))
@@ -208,7 +209,7 @@ class PipelineManager:
         print(f"Detected {len(segments)} segments.")
         if not segments:
             print("No segments found")
-            return [generate_no_word_response()]
+            return []  # Return empty list instead of no_word_response
 
         # ====================================================
         # 3) Predict label for each detected word segment
@@ -221,13 +222,13 @@ class PipelineManager:
                 segment_data, start_f, end_f = segment_item
                 # Delegate selection of best label to classifier
                 cand_list = [self.preparer.prepare_resampled(cand) for cand in segment_data]
-                word = self.classifier.predict_best_from_candidates(cand_list)
+                word, confidence = self.classifier.predict_best_from_candidates(cand_list, return_confidence=True)
             else:
                 segment_np, start_f, end_f = segment_item
                 # 1. generate TTA variants
                 tta_variants = self.preparer.prepare_tta_segments(segment_np, n_augs=7)
                 # 2. predict using majority vote
-                word = self.classifier.predict_tta(tta_variants)
+                word, confidence = self.classifier.predict_tta(tta_variants, return_confidence=True)
 
             # ====================================================
             # 4) Special symbol -> end of sentence
@@ -242,12 +243,17 @@ class PipelineManager:
                 continue
 
             # ====================================================
-            # 5) Normal word -> add to buffer
+            # 5) Normal word -> add to buffer (only if confidence above threshold)
             # ====================================================
-            self.word_buffer.append(word)
-            responses.append(generate_given_word_response(word, self.word_buffer))
+            if confidence >= settings.MIN_CONFIDENCE_THRESHOLD:
+                self.word_buffer.append(word)
+                responses.append(generate_given_word_response(word, self.word_buffer, confidence))
+                print(f"[WORD DETECTED] {word} (confidence: {confidence:.2%})")
+            else:
+                print(f"[WORD IGNORED] {word} (confidence: {confidence:.2%} < threshold: {settings.MIN_CONFIDENCE_THRESHOLD})")
 
-        return_val = responses if settings.USE_SEGMENTATOR else [responses[-1]]
+        # Return responses (can be empty list if no words above threshold)
+        return_val = responses if settings.USE_SEGMENTATOR else ([responses[-1]] if responses else [])
         return return_val
 
     # ------------------------------------------------------------------
@@ -387,7 +393,7 @@ class PipelineManager:
 
             # Normal word -> add to buffer
             self.word_buffer.append(word)
-            responses.append(generate_given_word_response(word, self.word_buffer))
+            responses.append(generate_given_word_response(word, self.word_buffer, confidence))
 
         # If no words detected, return no-word response
         if not responses:
