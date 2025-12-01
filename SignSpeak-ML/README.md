@@ -287,7 +287,7 @@ app_models/qwen2.5-1.5b-instruct-q4_k_m.gguf
 
 Right now this app is in its **development** phase - the vocabulary is very limited:
 
-Current state (when using conf_final_v3.pt):
+Current state (when using conf_final_v3.3(hybrid_norm).pt):
 
 | Metric    | Value      |
 | --------- | ---------- |
