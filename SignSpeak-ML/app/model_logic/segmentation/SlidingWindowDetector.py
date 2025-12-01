@@ -78,22 +78,31 @@ class SlidingWindowDetector:
         # Window tracking for logging
         self.window_count: int = 0
 
+        # Global frame offset (set by PipelineManager before each batch)
+        # This ensures consistent frame numbering across all detectors
+        self.global_frame_offset: int = 0
+
     def reset(self):
-        """Reset all state"""
+        """
+        Reset all detector state including local frame counter.
+
+        Note: total_frames is reset to 0. Global frame tracking is handled
+        by PipelineManager.global_frame_counter which will be added as offset.
+        """
         self.frame_buffer.clear()
         self.voting_deque.clear()
         self.confidence_deque.clear()
         self.frames_since_last_window = 0
         self.last_emitted_word = None
         self.frames_since_emission = 0
-        self.total_frames = 0
+        self.total_frames = 0  # Reset local frame counter
 
     def add_frame(
         self,
         frame_vec: np.ndarray,
         classifier: Any,
         preparer: Any
-    ) -> Optional[Tuple[str, float]]:
+    ) -> Optional[Tuple[str, float, int, int]]:
         """
         Add a single frame and potentially return a detected word.
 
@@ -103,7 +112,7 @@ class SlidingWindowDetector:
             preparer: DataPreparer with prepare_resampled method
 
         Returns:
-            (word, confidence) if word detected, None otherwise
+            (word, confidence, start_frame, end_frame) if word detected, None otherwise
         """
         # Add frame to buffer (deque auto-drops oldest with maxlen - O(1))
         self.frame_buffer.append(frame_vec)
@@ -200,14 +209,18 @@ class SlidingWindowDetector:
 
                     # Estimate temporal boundaries based on voting window
                     # Word was stable across voting_size frames
-                    estimated_end = self.total_frames  # Current frame
-                    estimated_start = max(0, estimated_end - self.voting_size)  # Start of voting window
+                    estimated_end = self.total_frames  # Current frame (local)
+                    estimated_start = max(0, estimated_end - self.voting_size)  # Start of voting window (local)
+
+                    # Add global offset for consistent frame numbering across detectors
+                    global_start = self.global_frame_offset + estimated_start
+                    global_end = self.global_frame_offset + estimated_end
 
                     # Log word emission
                     logger.log_sliding_word_emitted(top_word, word_confidence, count, self.vote_threshold,
-                                                   estimated_start, estimated_end)
+                                                   global_start, global_end)
 
-                    return (top_word, word_confidence, estimated_start, estimated_end)
+                    return (top_word, word_confidence, global_start, global_end)
 
         return None
 
@@ -278,11 +291,15 @@ class SlidingWindowDetector:
                     self.last_emitted_word = top_word
                     self.frames_since_emission = 0
 
-                    # Estimate temporal boundaries for flushed word
+                    # Estimate temporal boundaries for flushed word (local)
                     estimated_end = self.total_frames
                     estimated_start = max(0, estimated_end - self.voting_size)
 
-                    return (top_word, 0.8, estimated_start, estimated_end)
+                    # Add global offset for consistent frame numbering
+                    global_start = self.global_frame_offset + estimated_start
+                    global_end = self.global_frame_offset + estimated_end
+
+                    return (top_word, 0.8, global_start, global_end)
 
         return None
 

@@ -178,10 +178,10 @@ class Settings(BaseSettings):
     FORCE_FLUSH_ON_BATCH_END: bool = True
 
     # Minimum frames in buffer before allowing flush (prevents flushing noise)
-    MIN_FRAMES_FOR_FLUSH: int = 20
+    MIN_FRAMES_FOR_FLUSH: int = 30
 
     # Lower confidence threshold for flush (catches uncertain last words that might be valid)
-    FLUSH_MIN_CONFIDENCE: float = 0.4  # Lower than MIN_CONFIDENCE_THRESHOLD
+    FLUSH_MIN_CONFIDENCE: float = 0.5  # Lower than MIN_CONFIDENCE_THRESHOLD
 
     # ========================================================================
     # 5. LOGGING & DEBUGGING

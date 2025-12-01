@@ -42,6 +42,10 @@ class WordSegmenter:
         # Track start of current segment being built
         self.segment_start_frame = 0
 
+        # Global frame offset (set by PipelineManager before each batch)
+        # This ensures consistent frame numbering across all detectors
+        self.global_frame_offset: int = 0
+
     # -------------------------------------------------------
 
     def add_frame(self, frame_vec: np.ndarray):
@@ -123,20 +127,24 @@ class WordSegmenter:
             # Extract word to return
             word_frames_np = np.array(word_frames, dtype=np.float32)
 
-            # Calculate temporal boundaries
+            # Calculate temporal boundaries (local)
             segment_end_frame = self.total_frames_processed - self.silence_frames - 1
             start_frame = self.segment_start_frame
             end_frame = segment_end_frame
 
+            # Add global offset for consistent frame numbering across detectors
+            global_start = self.global_frame_offset + start_frame
+            global_end = self.global_frame_offset + end_frame
+
             # Log word detection
-            logger.log_segmenter_word_detected(start_frame, end_frame, len(word_frames))
+            logger.log_segmenter_word_detected(global_start, global_end, len(word_frames))
 
             # Reset buffer (keep silence tail)
             self.buffer = self.buffer[-self.silence_frames:]
             # Update segment start for next word
             self.segment_start_frame = self.total_frames_processed - len(self.buffer)
 
-            return (word_frames_np, start_frame, end_frame)
+            return (word_frames_np, global_start, global_end)
 
         return None
 
@@ -158,16 +166,20 @@ class WordSegmenter:
         # Emit entire buffer (don't trim silence - it's the end!)
         word_frames_np = np.array(self.buffer, dtype=np.float32)
 
-        # Calculate temporal boundaries
+        # Calculate temporal boundaries (local)
         start_frame = self.segment_start_frame
         end_frame = self.total_frames_processed - 1
+
+        # Add global offset for consistent frame numbering
+        global_start = self.global_frame_offset + start_frame
+        global_end = self.global_frame_offset + end_frame
 
         # Clear buffer
         self.buffer = []
         # Update segment start for potential next word
         self.segment_start_frame = self.total_frames_processed
 
-        return (word_frames_np, start_frame, end_frame)
+        return (word_frames_np, global_start, global_end)
 
     def add_frame_with_alternatives(self, frame_vec: np.ndarray):
         """
@@ -286,7 +298,10 @@ class WordSegmenter:
 
     def reset(self):
         """
-        Reset segmenter state completely.
+        Reset segmenter state completely including local frame counter.
+
+        Note: total_frames_processed is reset to 0. Global frame tracking is handled
+        by PipelineManager.global_frame_counter which will be added as offset.
 
         Call this between independent processing batches/windows to avoid
         state contamination from previous data.
@@ -296,4 +311,5 @@ class WordSegmenter:
         self.prev_movement = 0.0
         self.silence_count = 0
         self.ema_motion = 0.0
-        # Note: total_frames_processed is NOT reset - it's cumulative
+        self.total_frames_processed = 0  # Reset local frame counter
+        self.segment_start_frame = 0

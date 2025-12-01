@@ -48,6 +48,12 @@ class PipelineManager:
         self.word_buffer: List[str] = []
         self.sentence_buffer: List[str] = []
 
+        # --- Global frame counter for unified temporal tracking ---
+        # Tracks total frames processed in current session
+        # Both detectors will add this offset to their local frame indices
+        # to ensure consistent frame numbering across detections
+        self.global_frame_counter: int = 0
+
     # ------------------------------------------------------------------
     # MAIN ENTRYPOINT
     # ------------------------------------------------------------------
@@ -94,6 +100,12 @@ class PipelineManager:
         if seq is None or len(seq) == 0:
             return [generate_no_word_response()]
 
+        # Store batch size for global frame counter update
+        batch_frame_count = len(seq)
+
+        # Set global frame offset in detector for unified frame numbering
+        self.sliding_detector.global_frame_offset = self.global_frame_counter
+
         # ====================================================
         # 2) Process frames through sliding window detector
         # ====================================================
@@ -132,13 +144,8 @@ class PipelineManager:
         # 3) Process detected words
         # ====================================================
         for detection in detected_words:
-            # Handle both formats: (word, conf) or (word, conf, start, end)
-            if len(detection) == 4:
-                word, confidence, start_frame, end_frame = detection
-            else:
-                # Backward compatibility for 2-tuple
-                word, confidence = detection
-                start_frame, end_frame = 0, len(seq) - 1
+            # All detections now return 4-tuple: (word, confidence, start_frame, end_frame)
+            word, confidence, start_frame, end_frame = detection
 
             # ====================================================
             # 4) Special symbol -> end of sentence
@@ -176,7 +183,12 @@ class PipelineManager:
 
         # If no words detected, return empty list (consistency with segmenter)
         if not responses:
+            # Still update global frame counter even if no detections
+            self.global_frame_counter += batch_frame_count
             return []
+
+        # Update global frame counter for unified temporal tracking
+        self.global_frame_counter += batch_frame_count
 
         return responses
 
@@ -197,6 +209,12 @@ class PipelineManager:
 
         if seq is None or len(seq) == 0:
             return [generate_no_word_response()]
+
+        # Store batch size for global frame counter update
+        batch_frame_count = len(seq)
+
+        # Set global frame offset in detector for unified frame numbering
+        self.segmenter.global_frame_offset = self.global_frame_counter
 
         # ====================================================
         # 2) Feed each frame into segmenter
@@ -298,6 +316,9 @@ class PipelineManager:
                 logger.log_detector_result("SEGMENTER", word, confidence, (start_f, end_f) if start_f is not None else None, "REJECTED")
                 responses.append(generate_no_word_response('Low confidence word ignored'))
 
+        # Update global frame counter for unified temporal tracking
+        self.global_frame_counter += batch_frame_count
+
         # Return responses (can be empty list if no words above threshold)
         return_val = responses if settings.USE_SEGMENTATOR else ([responses[-1]] if responses else [])
         return return_val
@@ -320,38 +341,29 @@ class PipelineManager:
         if seq is None or len(seq) == 0:
             return [generate_no_word_response()]
 
+        # Store batch size for global frame counter update
+        batch_frame_count = len(seq)
+
+        # Set global frame offset in detectors for unified frame numbering
+        self.sliding_detector.global_frame_offset = self.global_frame_counter
+        self.segmenter.global_frame_offset = self.global_frame_counter
+
         # ====================================================
         # 2a) Run sliding window detector
         # ====================================================
         logger.log_detector_start("SLIDING")
         sliding_results = []  # Will store (word, confidence, start_frame, end_frame)
         if settings.SLIDING_WINDOW_BATCH_PREDICT:
-            sliding_detections = self.sliding_detector.add_frames_batch_optimized(
+            sliding_results = self.sliding_detector.add_frames_batch_optimized(
                 list(seq), self.classifier, self.preparer
             )
-            # Sliding detector now returns 4-tuple: (word, confidence, start_frame, end_frame)
-            for detection in sliding_detections:
-                if len(detection) == 4:
-                    word, confidence, start_f, end_f = detection
-                else:
-                    # Backward compatibility for old 2-tuple format
-                    word, confidence = detection
-                    start_f, end_f = 0, len(seq) - 1
-                sliding_results.append((word, confidence, start_f, end_f))
         else:
             for vec in seq:
                 result = self.sliding_detector.add_frame(
                     vec, self.classifier, self.preparer
                 )
                 if result is not None:
-                    # add_frame now returns 4-tuple: (word, confidence, start_frame, end_frame)
-                    if len(result) == 4:
-                        word, confidence, start_f, end_f = result
-                    else:
-                        # Backward compatibility for old 2-tuple format
-                        word, confidence = result
-                        start_f, end_f = 0, len(seq) - 1
-                    sliding_results.append((word, confidence, start_f, end_f))
+                    sliding_results.append(result)
 
         # ====================================================
         # 2b) Run traditional segmenter
@@ -489,6 +501,9 @@ class PipelineManager:
         logger.log_pipeline_batch_summary(len(detected_words_list), detected_words_list, processing_time)
         logger.log_pipeline_buffer_state(self.word_buffer, self.sentence_buffer)
 
+        # Update global frame counter for unified temporal tracking
+        self.global_frame_counter += batch_frame_count
+
         # NO RESET HERE - let buffer persist for next batch
         return responses
 
@@ -503,9 +518,18 @@ class PipelineManager:
         return response
 
     def reset_buffer(self):
-        """Reset internal word buffer and detector state."""
+        """
+        Reset internal word buffer, detector state, and global frame counter.
+
+        This should be called between independent sessions to:
+        - Clear accumulated words
+        - Reset detector internal buffers
+        - Reset frame counter to prevent overflow
+        """
         self.word_buffer.clear()
         if settings.USE_SEGMENTATOR:
             self.segmenter.reset()
         if settings.USE_SLIDING_WINDOW:
             self.sliding_detector.reset()
+        # Reset global frame counter to prevent overflow and start fresh session
+        self.global_frame_counter = 0
