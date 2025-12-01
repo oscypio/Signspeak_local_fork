@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     # ===== SEGMENTER (Motion-Based Detection) =====
 
     # Minimum motion magnitude to detect gesture start (0.0-1.0)
-    MOTION_THRESHOLD: float = 0.12  # Lower = more sensitive to motion
+    MOTION_THRESHOLD: float = 0.2  # Lower = more sensitive to motion
 
     # Number of consecutive low-motion frames to end a segment
     SILENCE_FRAMES: int = 6  # ~0.2s at 30fps
@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     BURST_MULTIPLIER: float = 2.00
 
     # Exponential moving average alpha for motion smoothing
-    EMA_ALPHA: float = 0.40
+    EMA_ALPHA: float = 0.43
 
 
 
@@ -68,10 +68,10 @@ class Settings(BaseSettings):
 
     # Stride - how often to classify (1 = every frame, 5 = every 5th frame)
     # Lower stride = more predictions = better accuracy but slower
-    SLIDING_WINDOW_STRIDE: int = int(os.getenv('SLIDING_WINDOW_STRIDE', 5))  # Suggest: 1 for best accuracy, 5 for speed
+    SLIDING_WINDOW_STRIDE: int = int(os.getenv('SLIDING_WINDOW_STRIDE', 1))  # Suggest: 1 for best accuracy, 5 for speed
 
     # Minimum confidence for individual predictions (before voting)
-    SLIDING_WINDOW_MIN_CONFIDENCE: float = float(os.getenv('SLIDING_WINDOW_MIN_CONFIDENCE', 0.55))
+    SLIDING_WINDOW_MIN_CONFIDENCE: float = float(os.getenv('SLIDING_WINDOW_MIN_CONFIDENCE', 0.51))
 
     # Buffer size (should equal WINDOW_SIZE)
     SLIDING_WINDOW_MAX_BUFFER: int = int(os.getenv('SLIDING_WINDOW_MAX_BUFFER', 60))
@@ -124,7 +124,7 @@ class Settings(BaseSettings):
     # Solo detections need slightly lower threshold to avoid missing gestures
     # Actual threshold = MIN_CONFIDENCE_THRESHOLD * HYBRID_SOLO_DETECTION_MULTIPLIER
     # Example: MIN_THRESHOLD=0.75, MULTIPLIER=0.9 → solo needs 0.675
-    HYBRID_SOLO_DETECTION_MULTIPLIER: float = float(os.getenv('HYBRID_SOLO_DETECTION_MULTIPLIER', 0.9))  # 90%, suggest: 0.85-0.95
+    HYBRID_SOLO_DETECTION_MULTIPLIER: float = float(os.getenv('HYBRID_SOLO_DETECTION_MULTIPLIER', 0.85))  # 90%, suggest: 0.85-0.95
 
     # ===== HYBRID LEGACY SETTINGS =====
     # These are mostly deprecated but kept for compatibility
@@ -183,7 +183,40 @@ class Settings(BaseSettings):
     # Lower confidence threshold for flush (catches uncertain last words that might be valid)
     FLUSH_MIN_CONFIDENCE: float = 0.4  # Lower than MIN_CONFIDENCE_THRESHOLD
 
+    # ========================================================================
+    # 5. LOGGING & DEBUGGING
+    # ========================================================================
 
+    # ===== DETAILED LOGGING =====
+
+    # Master switch for detailed pipeline logging
+    # When enabled, logs all detection steps, model outputs, and decision reasoning
+    ENABLE_DETAILED_LOGGING: bool = os.getenv('ENABLE_DETAILED_LOGGING', 'False').lower() in ('true', '1', 'yes')
+
+    # Log level: DEBUG, INFO, WARNING, ERROR
+    LOG_LEVEL: str = os.getenv('LOG_LEVEL', 'INFO')
+
+    # Minimal logging - only detector activity and final predictions
+    LOG_MINIMAL: bool = os.getenv('LOG_MINIMAL', 'True').lower() in ('true', '1', 'yes')
+
+    # Log raw model outputs (top-N predictions with probabilities)
+    LOG_MODEL_OUTPUTS: bool = os.getenv('LOG_MODEL_OUTPUTS', 'True').lower() in ('true', '1', 'yes')
+    LOG_TOP_N_PREDICTIONS: int = int(os.getenv('LOG_TOP_N_PREDICTIONS', 5))
+
+    # Log segmentation details (motion detection, silence frames, etc.)
+    LOG_SEGMENTATION: bool = os.getenv('LOG_SEGMENTATION', 'True').lower() in ('true', '1', 'yes')
+
+    # Log sliding window voting mechanism
+    LOG_VOTING: bool = os.getenv('LOG_VOTING', 'True').lower() in ('true', '1', 'yes')
+
+    # Log hybrid detector decisions (IoU matching, conflicts, etc.)
+    LOG_HYBRID_DECISIONS: bool = os.getenv('LOG_HYBRID_DECISIONS', 'True').lower() in ('true', '1', 'yes')
+
+    # Log confidence filtering decisions
+    LOG_FILTERING: bool = os.getenv('LOG_FILTERING', 'True').lower() in ('true', '1', 'yes')
+
+    # Log sentence polishing
+    LOG_POLISHING: bool = os.getenv('LOG_POLISHING', 'True').lower() in ('true', '1', 'yes')
 
 
 settings = Settings()

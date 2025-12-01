@@ -17,6 +17,7 @@ Author: SignSpeak Team
 
 from typing import List, Tuple, Dict, Any
 from ..utils.config import settings
+from ..utils.logger import logger
 
 
 class HybridDetector:
@@ -71,13 +72,18 @@ class HybridDetector:
         Returns:
             Combined list of (word, confidence, start_frame, end_frame) tuples sorted by start_frame
         """
+        # Log input
+        logger.log_hybrid_input(len(segmenter_results), len(sliding_results))
+
         if not segmenter_results and not sliding_results:
             return []
 
         if not segmenter_results:
+            logger.log_debug('HYBRID', 'No segmenter results, using sliding only')
             return sorted(sliding_results, key=lambda x: x[2])
 
         if not sliding_results:
+            logger.log_debug('HYBRID', 'No sliding results, using segmenter only')
             return sorted(segmenter_results, key=lambda x: x[2])
 
         # Apply strategy
@@ -369,6 +375,11 @@ class HybridDetector:
                     self.stats['agreements'] += 1
                     self.stats['total_boosted'] += 1
 
+                    # Log match
+                    logger.log_hybrid_match(seg_word, seg_conf, (seg_start, seg_end),
+                                          slide_word, slide_conf, (slide_start, slide_end),
+                                          best_iou, agreement=True)
+
                     # Calibrate confidence based on IoU strength
                     max_conf = max(seg_conf, slide_conf)
                     if best_iou > 0.7:
@@ -382,9 +393,13 @@ class HybridDetector:
                     if seg_conf > slide_conf:
                         combined.append((seg_word, boosted_conf, seg_start, seg_end))
                         self.stats['segmenter_wins'] += 1
+                        logger.log_hybrid_decision(seg_word, boosted_conf,
+                                                  f"Segmenter boundaries (higher conf)", boosted=True)
                     else:
                         combined.append((slide_word, boosted_conf, slide_start, slide_end))
                         self.stats['sliding_wins'] += 1
+                        logger.log_hybrid_decision(slide_word, boosted_conf,
+                                                  f"Sliding boundaries (higher conf)", boosted=True)
 
                     used_seg_indices.add(seg_idx)
                     used_slide_indices.add(best_slide_idx)
@@ -393,20 +408,31 @@ class HybridDetector:
                     # CONFLICT: Different words, high IoU
                     self.stats['conflicts'] += 1
 
+                    # Log conflict
+                    logger.log_hybrid_match(seg_word, seg_conf, (seg_start, seg_end),
+                                          slide_word, slide_conf, (slide_start, slide_end),
+                                          best_iou, agreement=False)
+
                     # Take higher confidence, but apply penalty for disagreement
                     if seg_conf > slide_conf + 0.1:  # Segmenter significantly more confident
                         combined.append((seg_word, seg_conf * 0.95, seg_start, seg_end))
                         self.stats['segmenter_wins'] += 1
+                        logger.log_hybrid_decision(seg_word, seg_conf * 0.95,
+                                                  f"Segmenter more confident ({seg_conf:.2%} vs {slide_conf:.2%})")
                         used_seg_indices.add(seg_idx)
                     elif slide_conf > seg_conf + 0.1:  # Sliding significantly more confident
                         combined.append((slide_word, slide_conf * 0.95, slide_start, slide_end))
                         self.stats['sliding_wins'] += 1
+                        logger.log_hybrid_decision(slide_word, slide_conf * 0.95,
+                                                  f"Sliding more confident ({slide_conf:.2%} vs {seg_conf:.2%})")
                         used_slide_indices.add(best_slide_idx)
                     else:
                         # Similar confidence - keep both (might be overlapping gestures)
                         combined.append((seg_word, seg_conf * 0.9, seg_start, seg_end))
                         combined.append((slide_word, slide_conf * 0.9, slide_start, slide_end))
                         self.stats['disagreements'] += 1
+                        logger.log_hybrid_decision(f"{seg_word}+{slide_word}", seg_conf * 0.9,
+                                                  f"Similar confidence - keeping both")
                         used_seg_indices.add(seg_idx)
                         used_slide_indices.add(best_slide_idx)
 
@@ -424,7 +450,13 @@ class HybridDetector:
 
             else:
                 # ONLY SEGMENTER detected (no match or low IoU)
-                if seg_conf >= settings.MIN_CONFIDENCE_THRESHOLD * settings.HYBRID_SOLO_DETECTION_MULTIPLIER:
+                solo_threshold = settings.MIN_CONFIDENCE_THRESHOLD * settings.HYBRID_SOLO_DETECTION_MULTIPLIER
+                accepted = seg_conf >= solo_threshold
+
+                logger.log_hybrid_solo_detection("SEGMENTER", seg_word, seg_conf,
+                                                solo_threshold, accepted)
+
+                if accepted:
                     combined.append((seg_word, seg_conf, seg_start, seg_end))
                     self.stats['segmenter_wins'] += 1
                     used_seg_indices.add(seg_idx)
@@ -432,7 +464,13 @@ class HybridDetector:
         # Add sliding-only detections that weren't matched
         for slide_idx, (slide_word, slide_conf, slide_start, slide_end) in enumerate(sliding_results):
             if slide_idx not in used_slide_indices:
-                if slide_conf >= settings.MIN_CONFIDENCE_THRESHOLD * settings.HYBRID_SOLO_DETECTION_MULTIPLIER:
+                solo_threshold = settings.MIN_CONFIDENCE_THRESHOLD * settings.HYBRID_SOLO_DETECTION_MULTIPLIER
+                accepted = slide_conf >= solo_threshold
+
+                logger.log_hybrid_solo_detection("SLIDING", slide_word, slide_conf,
+                                                solo_threshold, accepted)
+
+                if accepted:
                     combined.append((slide_word, slide_conf, slide_start, slide_end))
                     self.stats['sliding_wins'] += 1
 
@@ -443,6 +481,9 @@ class HybridDetector:
 
         # Temporal deduplication
         combined = self._deduplicate_temporal(combined)
+
+        # Log final stats
+        logger.log_hybrid_stats(self.stats)
 
         return combined
 

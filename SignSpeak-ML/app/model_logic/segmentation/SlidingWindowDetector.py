@@ -17,6 +17,7 @@ from typing import Optional, Tuple, List, Any
 from collections import deque, Counter
 
 from ..utils.config import settings
+from ..utils.logger import logger
 
 
 class SlidingWindowDetector:
@@ -74,6 +75,9 @@ class SlidingWindowDetector:
         self.frames_since_emission: int = 0
         self.total_frames: int = 0
 
+        # Window tracking for logging
+        self.window_count: int = 0
+
     def reset(self):
         """Reset all state"""
         self.frame_buffer.clear()
@@ -118,6 +122,7 @@ class SlidingWindowDetector:
 
         # Reset stride counter
         self.frames_since_last_window = 0
+        self.window_count += 1
 
         # Extract window (all frames in buffer)
         window = np.array(self.frame_buffer, dtype=np.float32)
@@ -151,6 +156,12 @@ class SlidingWindowDetector:
         predicted_word = max(proba_dict, key=proba_dict.get)
         confidence = proba_dict[predicted_word]
 
+        # Log window classification
+        start_frame = self.total_frames - self.window_size
+        end_frame = self.total_frames
+        logger.log_sliding_window_classification(self.window_count, start_frame, end_frame,
+                                                predicted_word, confidence)
+
         # Add to voting deque (even if low confidence) + track confidence
         if self.use_voting:
             if confidence >= self.min_confidence:
@@ -164,6 +175,9 @@ class SlidingWindowDetector:
         if self.use_voting and len(self.voting_deque) == self.voting_size:
             vote_counts = Counter(self.voting_deque)
             top_word, count = vote_counts.most_common(1)[0]
+
+            # Log voting state
+            logger.log_sliding_voting_state(dict(vote_counts), self.vote_threshold, self.voting_size)
 
             # Check if winner has enough votes
             if top_word != "UNCERTAIN" and count >= self.vote_threshold:
@@ -188,6 +202,10 @@ class SlidingWindowDetector:
                     # Word was stable across voting_size frames
                     estimated_end = self.total_frames  # Current frame
                     estimated_start = max(0, estimated_end - self.voting_size)  # Start of voting window
+
+                    # Log word emission
+                    logger.log_sliding_word_emitted(top_word, word_confidence, count, self.vote_threshold,
+                                                   estimated_start, estimated_end)
 
                     return (top_word, word_confidence, estimated_start, estimated_end)
 

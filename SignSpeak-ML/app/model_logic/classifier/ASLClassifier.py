@@ -6,6 +6,7 @@ from typing import Optional, Dict, Type, cast
 
 from .models.GRUClassifier import GRUClassifier
 from ..utils.config import settings
+from ..utils.logger import logger
 
 
 class ASLClassifier:
@@ -90,13 +91,27 @@ class ASLClassifier:
         """
         Returns {label: probability}.
         """
+        # Log input shape
+        logger.log_classifier_input(seq_np.shape, seq_np.shape[-1] if len(seq_np.shape) > 1 else 0)
+
         x = self._prepare_tensor(seq_np)
         with torch.no_grad():
             logits = self.model(x)
             probs = torch.softmax(logits, dim=1)[0].cpu().numpy()
 
         labels = [self.idx_to_class[int(i)] for i in range(len(probs))]
-        return {label: float(p) for label, p in zip(labels, probs)}
+        result = {label: float(p) for label, p in zip(labels, probs)}
+
+        # Log top-N predictions
+        top_n = settings.LOG_TOP_N_PREDICTIONS
+        sorted_preds = sorted(result.items(), key=lambda x: x[1], reverse=True)[:top_n]
+        logger.log_classifier_raw_output(sorted_preds)
+
+        # Log final prediction
+        best_label, best_conf = sorted_preds[0]
+        logger.log_classifier_prediction(best_label, best_conf, list(probs))
+
+        return result
 
     def predict_proba_batch(self, seq_list: list[np.ndarray]) -> list[Dict[str, float]]:
         """
@@ -125,9 +140,17 @@ class ASLClassifier:
             probs = torch.softmax(logits, dim=1).cpu().numpy()  # (N, C)
 
         out = []
+        predictions = []
         for row in probs:
             labels = [self.idx_to_class[int(i)] for i in range(len(row))]
-            out.append({label: float(p) for label, p in zip(labels, row)})
+            result_dict = {label: float(p) for label, p in zip(labels, row)}
+            out.append(result_dict)
+            # Track prediction for logging
+            best_pred = max(result_dict.items(), key=lambda x: x[1])
+            predictions.append(best_pred[0])
+
+        # Log batch summary
+        logger.log_classifier_batch(len(seq_list), predictions)
 
         return out
 

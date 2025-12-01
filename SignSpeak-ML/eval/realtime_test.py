@@ -21,7 +21,6 @@ Controls:
 Author: SignSpeak Team
 """
 
-import os
 import sys
 import cv2
 import numpy as np
@@ -33,12 +32,9 @@ import urllib.error
 from collections import deque
 from typing import List, Dict, Any, Optional
 
-# --- MediaPipe for hand tracking ---
-try:
-    import mediapipe as mp
-except ImportError:
-    print("ERROR: mediapipe not found. Install with: pip install mediapipe")
-    sys.exit(1)
+
+import mediapipe as mp
+
 
 
 # ============================================================
@@ -64,12 +60,12 @@ class Config:
 
     # --- Frame Processing ---
     # Optimized for SlidingWindow (stride=10, so send batches of 10 frames)
-    BATCH_SIZE = 60  # Send frames to pipeline every N frames
+    BATCH_SIZE = 10  # Send frames to pipeline every N frames
     FRAME_SKIP = 0   # Process every N-th frame (0 = process all)
 
     # --- Display Settings ---
     SHOW_LANDMARKS = True
-    SHOW_DEBUG_INFO = True
+    SHOW_DEBUG_INFO = False
     SHOW_RAW_PREDICTIONS = True  # Show scanning/stability info
     FONT_SCALE = 0.7
     FONT_THICKNESS = 2
@@ -134,12 +130,12 @@ def mediapipe_to_frame_dict(
     mp_results,
     frame_idx: int,
     timestamp: float
-) -> Dict[str, Any]:
+) -> Optional[Dict[str, Any]]:
     """
     Convert MediaPipe results to FrameData dict (JSON-serializable)
 
-    Always returns a frame dict - with empty landmarks if no hands detected.
-    This simulates real app behavior where frames are sent continuously.
+    Returns None if no hands detected. This avoids sending empty frames to the
+    ML API — frames will be added to the buffer only when landmarks are present.
 
     Args:
         mp_results: MediaPipe Hands processing results
@@ -147,29 +143,33 @@ def mediapipe_to_frame_dict(
         timestamp: Timestamp in seconds
 
     Returns:
-        FrameData dict (always, even with empty landmarks)
+        FrameData dict when hands detected, otherwise None.
     """
+    # If no hands detected, return None (do not send empty frames)
+    if not mp_results or not getattr(mp_results, 'multi_hand_landmarks', None):
+        return None
+
     landmarks_list = []
     handedness_list = []
 
     # Extract hands if detected
-    if mp_results.multi_hand_landmarks:
-        for hand_idx, hand_landmarks in enumerate(mp_results.multi_hand_landmarks):
-            if hand_idx >= 2:  # Max 2 hands
-                break
+    for hand_idx, hand_landmarks in enumerate(mp_results.multi_hand_landmarks):
+        if hand_idx >= 2:  # Max 2 hands
+            break
 
-            # Extract landmarks
-            lm_list = []
-            for landmark in hand_landmarks.landmark:
-                lm_list.append({
-                    "x": landmark.x,
-                    "y": landmark.y,
-                    "z": landmark.z,
-                    "visibility": getattr(landmark, 'visibility', 1.0)
-                })
-            landmarks_list.append(lm_list)
+        # Extract landmarks
+        lm_list = []
+        for landmark in hand_landmarks.landmark:
+            lm_list.append({
+                "x": landmark.x,
+                "y": landmark.y,
+                "z": landmark.z,
+                "visibility": getattr(landmark, 'visibility', 1.0)
+            })
+        landmarks_list.append(lm_list)
 
-            # Extract handedness
+        # Extract handedness (safe-guard if multi_handedness smaller)
+        if getattr(mp_results, 'multi_handedness', None) and len(mp_results.multi_handedness) > hand_idx:
             handedness = mp_results.multi_handedness[hand_idx]
             hand_label = handedness.classification[0].label
             hand_score = handedness.classification[0].score
@@ -181,7 +181,7 @@ def mediapipe_to_frame_dict(
                 "displayName": hand_label
             }])
 
-    # Always return frame dict (empty landmarks if no hands detected)
+    # Return frame dict (with landmarks present)
     return {
         "timestamp": timestamp,
         "sequenceNumber": frame_idx,
@@ -399,7 +399,7 @@ class RealtimeDetector:
 
         # Current words being built
         if self.current_sentence_words:
-            words_text = " → ".join(self.current_sentence_words)
+            words_text = " > ".join(self.current_sentence_words)
         else:
             words_text = "(no words yet)"
         draw_styled_text(
@@ -572,15 +572,16 @@ class RealtimeDetector:
                             mp.solutions.hands.HAND_CONNECTIONS
                         )
 
-                # Convert to FrameData dict (always, even with empty landmarks)
+                # Convert to FrameData dict (only if hands detected)
                 frame_data = mediapipe_to_frame_dict(
                     mp_results,
                     self.frame_count,
                     current_time - self.start_time
                 )
 
-                # Always add to buffer (simulates continuous stream from real app)
-                self.frame_buffer.append(frame_data)
+                # Add to buffer only when landmarks are present
+                if frame_data is not None:
+                    self.frame_buffer.append(frame_data)
 
                 # Process batch when buffer is full
                 if len(self.frame_buffer) >= self.config.BATCH_SIZE:
@@ -668,4 +669,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

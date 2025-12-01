@@ -1,5 +1,6 @@
 import numpy as np
 from ..utils.config import settings
+from ..utils.logger import logger
 
 class WordSegmenter:
     """
@@ -77,6 +78,8 @@ class WordSegmenter:
         # 1. Burst detection (adaptive start-of-word boost)
         # ====================================================
         if self.prev_movement > 0 and movement > self.prev_movement * self.burst_multiplier:
+            logger.log_segmenter_burst(self.total_frames_processed - 1, movement,
+                                      self.prev_movement * self.burst_multiplier)
             self.silence_count = 0
             self.prev_movement = movement
             return None
@@ -84,13 +87,19 @@ class WordSegmenter:
         # ====================================================
         # 2. Silence vs movement logic
         # ====================================================
-        if self.ema_motion < self.motion_threshold:
+        is_silence = self.ema_motion < self.motion_threshold
+
+        if is_silence:
             self.silence_count += 1
         else:
             self.silence_count = 0
             # Reset segment start on significant movement
             if self.silence_count == 0 and len(self.buffer) <= self.silence_frames:
                 self.segment_start_frame = self.total_frames_processed - len(self.buffer)
+
+        # Log frame state
+        logger.log_segmenter_frame(self.total_frames_processed - 1, self.ema_motion,
+                                  is_silence, len(self.buffer))
 
         # Update for next frame
         self.prev_movement = movement
@@ -118,6 +127,9 @@ class WordSegmenter:
             segment_end_frame = self.total_frames_processed - self.silence_frames - 1
             start_frame = self.segment_start_frame
             end_frame = segment_end_frame
+
+            # Log word detection
+            logger.log_segmenter_word_detected(start_frame, end_frame, len(word_frames))
 
             # Reset buffer (keep silence tail)
             self.buffer = self.buffer[-self.silence_frames:]

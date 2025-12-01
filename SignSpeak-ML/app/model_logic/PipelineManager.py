@@ -1,8 +1,10 @@
 from typing import List, Dict, Any
+import time
 
 from .polishing.SentencePolisher import SentencePolisher
 from .polishing.SentencePolisherT5 import T5Polisher
 from .utils.util_functions import *
+from .utils.logger import logger
 from ..schemas import FrameData
 from .preprocessing.DataPreparer import UnifiedDataPreparer
 from .segmentation.WordSegmenter import WordSegmenter
@@ -56,6 +58,16 @@ class PipelineManager:
         - process_with_sliding_window() if USE_SLIDING_WINDOW is enabled
         - process_with_segmenter() (traditional approach) otherwise
         """
+        # Determine mode
+        if settings.USE_HYBRID_MODE:
+            mode = "HYBRID"
+        elif settings.USE_SLIDING_WINDOW:
+            mode = "SLIDING_WINDOW"
+        else:
+            mode = "SEGMENTER"
+
+        logger.log_pipeline_start(len(frames), mode)
+
         if settings.USE_HYBRID_MODE:
             return self.process_with_hybrid(frames)
         elif settings.USE_SLIDING_WINDOW:
@@ -86,6 +98,7 @@ class PipelineManager:
         # 2) Process frames through sliding window detector
         # ====================================================
         responses = []
+        logger.log_detector_start("SLIDING")
 
         if settings.SLIDING_WINDOW_BATCH_PREDICT:
             # Optimized batch processing
@@ -110,9 +123,10 @@ class PipelineManager:
                 self.classifier, self.preparer
             )
             if flushed_result is not None:
-                word, confidence = flushed_result
-                print(f"[SLIDING FLUSH] Emitting last tracked word: {word} (conf={confidence:.2f})")
-                detected_words.append((word, confidence))
+                # flush_buffer now returns 4-tuple: (word, confidence, start_frame, end_frame)
+                word, confidence, start_f, end_f = flushed_result
+                logger.log_detector_flush("SLIDING", word, confidence)
+                detected_words.append((word, confidence, start_f, end_f))
 
         # ====================================================
         # 3) Process detected words
@@ -130,9 +144,17 @@ class PipelineManager:
             # 4) Special symbol -> end of sentence
             # ====================================================
             if word == settings.SPECIAL_LABEL:
+                logger.log_special_label_detected(word, "SLIDING")
                 final_sentence = " ".join(self.word_buffer)
                 self.word_buffer.clear()
+
+                # Log polishing
+                logger.log_polisher_input(final_sentence, len(final_sentence.split()))
+                polishing_start = time.time()
                 final_sentence = self.polisher.polish(final_sentence)
+                polishing_time = time.time() - polishing_start
+                logger.log_polisher_output(final_sentence, True)
+                logger.log_polisher_model_info("Qwen2.5" if not settings.USE_T5 else "T5", polishing_time)
 
                 self.sentence_buffer.append(final_sentence)
                 responses.append(generate_end_of_sentence_response(final_sentence))
@@ -142,11 +164,15 @@ class PipelineManager:
             # 5) Normal word -> add to buffer (only if confidence above threshold)
             # ====================================================
             if confidence >= settings.MIN_CONFIDENCE_THRESHOLD:
+                logger.log_confidence_filter_accept(word, confidence, settings.MIN_CONFIDENCE_THRESHOLD,
+                                                   "SLIDING", (start_frame, end_frame))
+                logger.log_final_prediction(word, confidence, "SLIDING")
                 self.word_buffer.append(word)
                 responses.append(generate_given_word_response(word, self.word_buffer, confidence))
-                print(f"[SLIDING WORD] {word} (conf: {confidence:.2%}, frames: {start_frame}-{end_frame})")
             else:
-                print(f"[SLIDING IGNORED] {word} (conf: {confidence:.2%} < threshold: {settings.MIN_CONFIDENCE_THRESHOLD})")
+                logger.log_confidence_filter_reject(word, confidence, settings.MIN_CONFIDENCE_THRESHOLD,
+                                                   "SLIDING", (start_frame, end_frame))
+                logger.log_detector_result("SLIDING", word, confidence, (start_frame, end_frame), "REJECTED")
 
         # If no words detected, return empty list (consistency with segmenter)
         if not responses:
@@ -177,6 +203,7 @@ class PipelineManager:
         # ====================================================
         segments = []  # Will store (segment_data, start_frame, end_frame)
         if settings.USE_SEGMENTATOR:
+            logger.log_detector_start("SEGMENTER")
 
             for vec in seq:
                 if settings.SEGMENTER_RETURN_ALTERNATIVES:
@@ -208,7 +235,7 @@ class PipelineManager:
                     # Add to segments if confidence acceptable (use stricter threshold)
                     min_conf = max(settings.FLUSH_MIN_CONFIDENCE, settings.MIN_CONFIDENCE_THRESHOLD)
                     if confidence >= min_conf:
-                        print(f"[FLUSH] Emitting buffered segment: {word} (conf={confidence:.2f}, min_threshold={min_conf:.2f}, frames={start_f}-{end_f})")
+                        logger.log_detector_flush("SEGMENTER", word, confidence)
                         # Wrap in list for SEGMENTER_RETURN_ALTERNATIVES compatibility
                         if settings.SEGMENTER_RETURN_ALTERNATIVES:
                             segments.append(([flushed_segment], start_f, end_f))
@@ -217,9 +244,8 @@ class PipelineManager:
         else:
             segments.append((seq, 0, len(seq) - 1))
 
-        print(f"Detected {len(segments)} segments.")
+        logger.log_detector_start("SEGMENTER", len(segments))
         if not segments:
-            print("No segments found")
             return []  # Return empty list instead of no_word_response
 
         # ====================================================
@@ -234,17 +260,21 @@ class PipelineManager:
                 # Delegate selection of best label to classifier
                 cand_list = [self.preparer.prepare_resampled(cand) for cand in segment_data]
                 word, confidence = self.classifier.predict_best_from_candidates(cand_list, return_confidence=True)
+                logger.log_detector_result("SEGMENTER", word, confidence, (start_f, end_f) if start_f is not None else None,
+                                         f"{len(segment_data)} alternatives")
             else:
                 segment_np, start_f, end_f = segment_item
                 # 1. generate TTA variants
                 tta_variants = self.preparer.prepare_tta_segments(segment_np, n_augs=7)
                 # 2. predict using majority vote
                 word, confidence = self.classifier.predict_tta(tta_variants, return_confidence=True)
+                logger.log_detector_result("SEGMENTER", word, confidence, (start_f, end_f))
 
             # ====================================================
             # 4) Special symbol -> end of sentence
             # ====================================================
             if word == settings.SPECIAL_LABEL:
+                logger.log_special_label_detected(word, "SEGMENTER")
                 final_sentence = " ".join(self.word_buffer)
                 self.word_buffer.clear()
                 final_sentence = self.polisher.polish(final_sentence)
@@ -257,12 +287,16 @@ class PipelineManager:
             # 5) Normal word -> add to buffer (only if confidence above threshold)
             # ====================================================
             if confidence >= settings.MIN_CONFIDENCE_THRESHOLD:
+                logger.log_confidence_filter_accept(word, confidence, settings.MIN_CONFIDENCE_THRESHOLD,
+                                                   "SEGMENTER", (start_f, end_f) if start_f is not None else None)
+                logger.log_final_prediction(word, confidence, "SEGMENTER")
                 self.word_buffer.append(word)
                 responses.append(generate_given_word_response(word, self.word_buffer, confidence))
-                print(f"[WORD DETECTED] {word} (confidence: {confidence:.2%})")
             else:
+                logger.log_confidence_filter_reject(word, confidence, settings.MIN_CONFIDENCE_THRESHOLD,
+                                                   "SEGMENTER", (start_f, end_f) if start_f is not None else None)
+                logger.log_detector_result("SEGMENTER", word, confidence, (start_f, end_f) if start_f is not None else None, "REJECTED")
                 responses.append(generate_no_word_response('Low confidence word ignored'))
-                print(f"[WORD IGNORED] {word} (confidence: {confidence:.2%} < threshold: {settings.MIN_CONFIDENCE_THRESHOLD})")
 
         # Return responses (can be empty list if no words above threshold)
         return_val = responses if settings.USE_SEGMENTATOR else ([responses[-1]] if responses else [])
@@ -289,26 +323,40 @@ class PipelineManager:
         # ====================================================
         # 2a) Run sliding window detector
         # ====================================================
+        logger.log_detector_start("SLIDING")
         sliding_results = []  # Will store (word, confidence, start_frame, end_frame)
         if settings.SLIDING_WINDOW_BATCH_PREDICT:
             sliding_detections = self.sliding_detector.add_frames_batch_optimized(
                 list(seq), self.classifier, self.preparer
             )
-            # Convert to format with temporal info (sliding detector doesn't provide it yet)
-            for word, confidence in sliding_detections:
-                sliding_results.append((word, confidence, 0, len(seq) - 1))
+            # Sliding detector now returns 4-tuple: (word, confidence, start_frame, end_frame)
+            for detection in sliding_detections:
+                if len(detection) == 4:
+                    word, confidence, start_f, end_f = detection
+                else:
+                    # Backward compatibility for old 2-tuple format
+                    word, confidence = detection
+                    start_f, end_f = 0, len(seq) - 1
+                sliding_results.append((word, confidence, start_f, end_f))
         else:
             for vec in seq:
                 result = self.sliding_detector.add_frame(
                     vec, self.classifier, self.preparer
                 )
                 if result is not None:
-                    word, confidence = result
-                    sliding_results.append((word, confidence, 0, len(seq) - 1))
+                    # add_frame now returns 4-tuple: (word, confidence, start_frame, end_frame)
+                    if len(result) == 4:
+                        word, confidence, start_f, end_f = result
+                    else:
+                        # Backward compatibility for old 2-tuple format
+                        word, confidence = result
+                        start_f, end_f = 0, len(seq) - 1
+                    sliding_results.append((word, confidence, start_f, end_f))
 
         # ====================================================
         # 2b) Run traditional segmenter
         # ====================================================
+        logger.log_detector_start("SEGMENTER")
         segmenter_results = []  # Will store (word, confidence, start_frame, end_frame)
         segments = []  # Will store segment data with temporal info
 
@@ -337,6 +385,8 @@ class PipelineManager:
                     confidences = [max(proba.values()) for proba in proba_dicts]
                     confidence = max(confidences)
                     # Use placeholder temporal info for alternatives mode
+                    logger.log_detector_result("SEGMENTER", word, confidence, (0, len(seq) - 1),
+                                             f"{len(segment_data)} alternatives")
                     segmenter_results.append((word, confidence, 0, len(seq) - 1))
                 else:
                     # Standard TTA approach with temporal info
@@ -346,6 +396,7 @@ class PipelineManager:
                     # Get confidence from TTA
                     proba_dict = self.classifier.predict_proba(self.preparer.prepare_resampled(segment_np))
                     confidence = proba_dict.get(word, 0.5)
+                    logger.log_detector_result("SEGMENTER", word, confidence, (start_f, end_f))
                     segmenter_results.append((word, confidence, start_f, end_f))
 
         # ====================================================
@@ -365,7 +416,7 @@ class PipelineManager:
 
                     # Add to segmenter results if confidence is acceptable
                     if confidence >= settings.FLUSH_MIN_CONFIDENCE:
-                        print(f"[FLUSH] Emitting buffered segment: {word} (conf={confidence:.2f}, frames={start_f}-{end_f})")
+                        logger.log_detector_flush("SEGMENTER", word, confidence)
                         segmenter_results.append((word, confidence, start_f, end_f))
 
             # Flush sliding window buffer
@@ -373,12 +424,15 @@ class PipelineManager:
                 self.classifier, self.preparer
             )
             if flushed_sliding is not None:
-                word, confidence = flushed_sliding
-                sliding_results.append((word, confidence, 0, len(seq) - 1))
+                # flush_buffer now returns 4-tuple: (word, confidence, start_frame, end_frame)
+                word, confidence, start_f, end_f = flushed_sliding
+                logger.log_detector_flush("SLIDING", word, confidence)
+                sliding_results.append((word, confidence, start_f, end_f))
 
         # ====================================================
         # 3) Combine results using hybrid detector
         # ====================================================
+        logger.log_detector_start("HYBRID")
         combined_results = self.hybrid_detector.combine_detections(
             segmenter_results, sliding_results
         )
@@ -392,24 +446,48 @@ class PipelineManager:
         # 4) Process combined detections
         # ====================================================
         responses = []
+        start_time = time.time()
 
         for word, confidence, start_f, end_f in combined_results:
             # Special symbol -> end of sentence
             if word == settings.SPECIAL_LABEL:
+                logger.log_special_label_detected(word, "HYBRID")
                 final_sentence = " ".join(self.word_buffer)
                 self.word_buffer.clear()
+
+                # Log polishing
+                logger.log_polisher_input(final_sentence, len(final_sentence.split()))
+                polishing_start = time.time()
                 final_sentence = self.polisher.polish(final_sentence)
+                polishing_time = time.time() - polishing_start
+                logger.log_polisher_output(final_sentence, True)
+                logger.log_polisher_model_info("Qwen2.5" if not settings.USE_T5 else "T5", polishing_time)
+
                 self.sentence_buffer.append(final_sentence)
                 responses.append(generate_end_of_sentence_response(final_sentence))
                 continue
 
-            # Normal word -> add to buffer
-            self.word_buffer.append(word)
-            responses.append(generate_given_word_response(word, self.word_buffer, confidence))
+            # Normal word -> add to buffer (only if confidence above threshold)
+            if confidence >= settings.MIN_CONFIDENCE_THRESHOLD:
+                logger.log_confidence_filter_accept(word, confidence, settings.MIN_CONFIDENCE_THRESHOLD,
+                                                   "HYBRID", (start_f, end_f))
+                logger.log_final_prediction(word, confidence, "HYBRID")
+                self.word_buffer.append(word)
+                responses.append(generate_given_word_response(word, self.word_buffer, confidence))
+            else:
+                logger.log_confidence_filter_reject(word, confidence, settings.MIN_CONFIDENCE_THRESHOLD,
+                                                   "HYBRID", (start_f, end_f))
+                logger.log_detector_result("HYBRID", word, confidence, (start_f, end_f), "REJECTED")
 
         # If no words detected, return no-word response
         if not responses:
             return [generate_no_word_response()]
+
+        # Log batch summary
+        processing_time = time.time() - start_time
+        detected_words_list = [resp.get('prediction', '') for resp in responses if resp.get('prediction')]
+        logger.log_pipeline_batch_summary(len(detected_words_list), detected_words_list, processing_time)
+        logger.log_pipeline_buffer_state(self.word_buffer, self.sentence_buffer)
 
         # NO RESET HERE - let buffer persist for next batch
         return responses
