@@ -132,14 +132,19 @@ class PipelineManager:
                 continue
 
             # ====================================================
-            # 5) Normal word -> add to buffer
+            # 5) Normal word -> add to buffer (only if confidence above threshold)
             # ====================================================
-            self.word_buffer.append(word)
-            responses.append(generate_given_word_response(word, self.word_buffer, confidence))
+            if confidence >= settings.MIN_CONFIDENCE_THRESHOLD:
+                self.word_buffer.append(word)
+                responses.append(generate_given_word_response(word, self.word_buffer, confidence))
+                print(f"[SLIDING WORD] {word} (confidence: {confidence:.2%})")
+            else:
+                responses.append(generate_no_word_response('Low confidence word ignored'))
+                print(f"[SLIDING IGNORED] {word} (confidence: {confidence:.2%} < threshold: {settings.MIN_CONFIDENCE_THRESHOLD})")
 
-        # If no words detected, return no-word response
+        # If no words detected, return empty list (consistency with segmenter)
         if not responses:
-            return [generate_no_word_response()]
+            return []
 
         return responses
 
@@ -250,6 +255,7 @@ class PipelineManager:
                 responses.append(generate_given_word_response(word, self.word_buffer, confidence))
                 print(f"[WORD DETECTED] {word} (confidence: {confidence:.2%})")
             else:
+                responses.append(generate_no_word_response('Low confidence word ignored'))
                 print(f"[WORD IGNORED] {word} (confidence: {confidence:.2%} < threshold: {settings.MIN_CONFIDENCE_THRESHOLD})")
 
         # Return responses (can be empty list if no words above threshold)

@@ -58,8 +58,8 @@ class Config:
     CAMERA_HEIGHT = 480
 
     # --- MediaPipe Settings ---
-    MP_MIN_DETECTION_CONFIDENCE = 0.7
-    MP_MIN_TRACKING_CONFIDENCE = 0.5
+    MP_MIN_DETECTION_CONFIDENCE = 0.65
+    MP_MIN_TRACKING_CONFIDENCE = 0.45
     MP_MAX_NUM_HANDS = 2
 
     # --- Frame Processing ---

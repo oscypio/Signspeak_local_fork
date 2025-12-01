@@ -73,7 +73,13 @@ class UnifiedDataPreparer:
 
     def prepare_raw(self, frames):
         coords = self._extract_raw_coords_from_api(frames)
-        coords = self.normalize_landmarks(coords)
+
+        # Choose normalization method based on config
+        if settings.USE_HYBRID_NORMALIZATION:
+            coords = self.normalize_landmarks_hybrid(coords)
+        else:
+            coords = self.normalize_landmarks(coords)
+
         coords = coords.reshape(coords.shape[0], -1)
         return coords  # (T, F) ORIGINAL FPS
 
@@ -152,8 +158,14 @@ class UnifiedDataPreparer:
             pkl = pickle.load(f)
 
         raw = np.array(pkl["keypoints"], dtype=np.float32)  # (T,42,4)
-        raw = self.normalize_landmarks(raw)                 # (T,42,4)
-        raw = raw.reshape(raw.shape[0], -1)                 # (T,168)
+
+        # Choose normalization method based on config
+        if settings.USE_HYBRID_NORMALIZATION:
+            raw = self.normalize_landmarks_hybrid(raw)
+        else:
+            raw = self.normalize_landmarks(raw)
+
+        raw = raw.reshape(raw.shape[0], -1)  # (T,168) or (T,138) for hybrid
 
         seq = self._process_sequence(raw)
         label = self._normalize_label(pkl.get("label", ""))
@@ -279,5 +291,109 @@ class UnifiedDataPreparer:
 
         if flat:
             coords_out = coords_out.reshape(T, -1)
+
+        return coords_out.astype(np.float32)
+
+    @staticmethod
+    def normalize_landmarks_hybrid(coords: np.ndarray) -> np.ndarray:
+        """
+        Hybrid normalization - preserves spatial context.
+
+        Combines:
+        1. Wrist-centered coordinates (local hand shape) - 21 landmarks × 3 coords = 63 features
+        2. Absolute wrist position (global context) - 3 features (x, y, z)
+        3. Hand orientation vector (pointing direction) - 3 features
+
+        Total: 69 features per hand × 2 hands = 138 features (vs 126 in wrist-centered)
+
+        Benefits:
+        - Preserves height information (y position)
+        - Preserves depth information (z position)
+        - Preserves horizontal position (x position)
+        - Captures hand pointing direction
+        - Still normalizes hand shape by size
+
+        Args:
+            coords: Input coordinates (T, 42, 4) or (T, 168) or (T, 126)
+
+        Returns:
+            Normalized coords with spatial context (T, 138) if flat, else (T, 2, 69)
+        """
+        original_shape = coords.shape
+
+        # Detect format
+        if coords.ndim == 3 and coords.shape[1] == 42:
+            T = coords.shape[0]
+            coords = coords.copy()
+            flat = False
+        else:
+            T = coords.shape[0]
+            feat_dim = coords.shape[1]
+
+            if feat_dim == 42 * 4:
+                coords = coords.reshape(T, 42, 4).copy()
+            elif feat_dim == 42 * 3:
+                coords = coords.reshape(T, 42, 3).copy()
+            else:
+                raise ValueError(f"Unsupported landmark format: {coords.shape}")
+
+            flat = True
+
+        # Extract xyz (drop visibility if present)
+        if coords.shape[2] == 4:
+            xyz = coords[..., :3]
+        else:
+            xyz = coords
+
+        xyz_hands = xyz.reshape(T, 2, 21, 3)
+
+        # Output: (T, 2, 69) - 69 features per hand
+        # 63 (wrist-centered shape) + 3 (wrist position) + 3 (orientation)
+        out_features = np.zeros((T, 2, 69), dtype=np.float32)
+
+        for t in range(T):
+            for h in range(2):
+                hand = xyz_hands[t, h]
+
+                # Check if hand is empty (all zeros)
+                if not hand.any():
+                    # Keep as zeros
+                    continue
+
+                wrist = hand[0]  # Landmark 0 - wrist
+                middle_finger_mcp = hand[9]  # Landmark 9 - middle finger MCP
+                middle_finger_tip = hand[12]  # Landmark 12 - middle finger tip
+
+                # 1. Wrist-centered local shape (same as original)
+                centered = hand - wrist
+                scale = np.linalg.norm(centered[9])  # Distance to middle finger MCP
+
+                if scale > 1e-6:
+                    centered = centered / scale
+                else:
+                    # Very small hand or bad detection - use unscaled
+                    centered = hand - wrist
+
+                # 2. Absolute wrist position (global context)
+                wrist_pos = wrist.copy()
+
+                # 3. Hand orientation vector (normalized pointing direction)
+                if scale > 1e-6:
+                    # Direction from wrist to middle finger tip
+                    orientation = (middle_finger_tip - wrist) / scale
+                else:
+                    # Default orientation if hand is too small
+                    orientation = np.array([0.0, 1.0, 0.0], dtype=np.float32)
+
+                # Concatenate all features: [63 shape] + [3 wrist_pos] + [3 orientation] = 69
+                out_features[t, h, :63] = centered.flatten()
+                out_features[t, h, 63:66] = wrist_pos
+                out_features[t, h, 66:69] = orientation
+
+        # Reshape to (T, 138) if flat was True
+        if flat:
+            coords_out = out_features.reshape(T, -1)
+        else:
+            coords_out = out_features
 
         return coords_out.astype(np.float32)

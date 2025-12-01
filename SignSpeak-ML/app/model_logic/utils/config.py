@@ -16,10 +16,15 @@ class Settings(BaseSettings):
     MIN_WORD_FRAMES: int = 8
     BURST_MULTIPLIER: float = 2.00
     EMA_ALPHA = 0.40
+    # Words below this threshold are ignored (no response)
+    MIN_CONFIDENCE_THRESHOLD: float = os.getenv('MIN_CONFIDENCE_THRESHOLD', 0.6)
 
     # ==== DATA PREPARER ====
     EXPECTED_FRAMES: int = 60
     ADD_FEATURES: bool = False
+
+    # Normalization method: 'wrist' (default) or 'hybrid' (preserves spatial context)
+    USE_HYBRID_NORMALIZATION: bool = os.getenv('USE_HYBRID_NORMALIZATION', True)
 
     # ===== MODEL ======
     MODEL_PATH: str = os.getenv('MODEL_PATH', "/app/app/model_logic/utils/model_configs/conf(large).pt")
@@ -30,7 +35,7 @@ class Settings(BaseSettings):
     USE_T5:bool = os.getenv('USE_T5', False)
 
     # ===== OTHER ====
-    USE_SEGMENTATOR: bool = os.getenv('USE_SEGMENTER', True)
+    USE_SEGMENTATOR: bool = os.getenv('USE_SEGMENTER', False)
     SPECIAL_LABEL: str = os.getenv('SPECIAL_LABEL', 'PUSH')
 
     # ===== SEGMENTER ALTERNATIVES / SCORING =====
@@ -38,10 +43,10 @@ class Settings(BaseSettings):
     SEGMENTER_RETURN_ALTERNATIVES: bool = os.getenv('USE_SEGMENTER_ALT', True)
 
     # How many alternative segment candidates to generate (incl. original)
-    SEGMENTER_ALTERNATIVES_COUNT: int = int(os.getenv('SEGMENTER_ALTERNATIVES_COUNT', 10))
+    SEGMENTER_ALTERNATIVES_COUNT: int = int(os.getenv('SEGMENTER_ALTERNATIVES_COUNT', 30))
 
     # Maximum shift in frames when generating start/end variants
-    SEGMENTER_MAX_SHIFT_FRAMES: int = int(os.getenv('SEGMENTER_MAX_SHIFT_FRAMES', 15))
+    SEGMENTER_MAX_SHIFT_FRAMES: int = int(os.getenv('SEGMENTER_MAX_SHIFT_FRAMES', 30))
 
     # Strategy for variant generation: currently only 'shift_trim' supported
     SEGMENTER_VARIANTS_STRATEGY: str = os.getenv('SEGMENTER_VARIANTS_STRATEGY', 'shift_trim')
@@ -57,25 +62,35 @@ class Settings(BaseSettings):
 
     # ===== SLIDING WINDOW DETECTOR =====
     # Enable sliding window detection instead of traditional segmenter
-    USE_SLIDING_WINDOW: bool = os.getenv('USE_SLIDING_WINDOW', False)
+    USE_SLIDING_WINDOW: bool = os.getenv('USE_SLIDING_WINDOW', True)
 
     # Window size for sliding window (should match EXPECTED_FRAMES)
     SLIDING_WINDOW_SIZE: int = int(os.getenv('SLIDING_WINDOW_SIZE', 60))
 
-    # Stride between consecutive windows (lower = more overlap, higher accuracy but slower)
-    SLIDING_WINDOW_STRIDE: int = int(os.getenv('SLIDING_WINDOW_STRIDE', 10))
+    # Stride between consecutive windows (1 = classify every frame like voting system)
+    SLIDING_WINDOW_STRIDE: int = int(os.getenv('SLIDING_WINDOW_STRIDE', 1))
 
     # Number of consecutive windows with same prediction to confirm word
     SLIDING_WINDOW_STABILITY_COUNT: int = int(os.getenv('SLIDING_WINDOW_STABILITY_COUNT', 3))
 
     # Minimum confidence threshold to accept a prediction
-    SLIDING_WINDOW_MIN_CONFIDENCE: float = float(os.getenv('SLIDING_WINDOW_MIN_CONFIDENCE', 0.85))
+    SLIDING_WINDOW_MIN_CONFIDENCE: float = float(os.getenv('SLIDING_WINDOW_MIN_CONFIDENCE', 0.55))
 
-    # Maximum buffer size (frames to keep in memory)
-    SLIDING_WINDOW_MAX_BUFFER: int = int(os.getenv('SLIDING_WINDOW_MAX_BUFFER', 120))
+    # Maximum buffer size - fixed at 60 frames (like voting system)
+    SLIDING_WINDOW_MAX_BUFFER: int = int(os.getenv('SLIDING_WINDOW_MAX_BUFFER', 60))
 
     # Use batch prediction for sliding windows (recommended for performance)
     SLIDING_WINDOW_BATCH_PREDICT: bool = os.getenv('SLIDING_WINDOW_BATCH_PREDICT', True)
+
+    # ===== VOTING MECHANISM =====
+    # Use voting mechanism instead of simple consecutive counting
+    SLIDING_WINDOW_USE_VOTING: bool = True
+
+    # Voting window size - how many recent predictions to consider
+    SLIDING_WINDOW_VOTING_SIZE: int = int(os.getenv('SLIDING_WINDOW_VOTING_SIZE', 22))
+
+    # Vote threshold - minimum votes required (out of VOTING_SIZE)
+    SLIDING_WINDOW_VOTE_THRESHOLD: int = int(os.getenv('SLIDING_WINDOW_VOTE_THRESHOLD', 15))
 
     # ===== HYBRID MODE =====
     # Use both segmenter and sliding window, combine results intelligently
@@ -126,8 +141,7 @@ class Settings(BaseSettings):
 
     # ===== WORD DETECTION THRESHOLD =====
     # Minimum confidence required to emit a detected word (0.0 - 1.0)
-    # Words below this threshold are ignored (no response)
-    MIN_CONFIDENCE_THRESHOLD: float = os.getenv('MIN_CONFIDENCE_THRESHOLD', 0.7)
+
 
 
 settings = Settings()

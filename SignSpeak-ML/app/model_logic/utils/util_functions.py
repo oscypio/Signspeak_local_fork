@@ -1,7 +1,7 @@
 from .config import settings
 
 
-def generate_no_word_response():
+def generate_no_word_response(msg="Empty or invalid landmark sequence"):
     """
     Returns no word found response in API-like schema
     :return: Api-like schema response
@@ -10,7 +10,7 @@ def generate_no_word_response():
         "prediction": None,
         "status": "error",
         "current_words": '',
-        "detail": "Empty or invalid landmark sequence"
+        "detail": str(msg)
     }
 
 def generate_given_word_response(word: str, current_words : list, confidence: float = None):
