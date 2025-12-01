@@ -117,7 +117,14 @@ class PipelineManager:
         # ====================================================
         # 3) Process detected words
         # ====================================================
-        for word, confidence in detected_words:
+        for detection in detected_words:
+            # Handle both formats: (word, conf) or (word, conf, start, end)
+            if len(detection) == 4:
+                word, confidence, start_frame, end_frame = detection
+            else:
+                # Backward compatibility for 2-tuple
+                word, confidence = detection
+                start_frame, end_frame = 0, len(seq) - 1
 
             # ====================================================
             # 4) Special symbol -> end of sentence
@@ -137,10 +144,9 @@ class PipelineManager:
             if confidence >= settings.MIN_CONFIDENCE_THRESHOLD:
                 self.word_buffer.append(word)
                 responses.append(generate_given_word_response(word, self.word_buffer, confidence))
-                print(f"[SLIDING WORD] {word} (confidence: {confidence:.2%})")
+                print(f"[SLIDING WORD] {word} (conf: {confidence:.2%}, frames: {start_frame}-{end_frame})")
             else:
-                responses.append(generate_no_word_response('Low confidence word ignored'))
-                print(f"[SLIDING IGNORED] {word} (confidence: {confidence:.2%} < threshold: {settings.MIN_CONFIDENCE_THRESHOLD})")
+                print(f"[SLIDING IGNORED] {word} (conf: {confidence:.2%} < threshold: {settings.MIN_CONFIDENCE_THRESHOLD})")
 
         # If no words detected, return empty list (consistency with segmenter)
         if not responses:

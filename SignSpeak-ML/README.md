@@ -346,7 +346,129 @@ Then app will not segment input and will await already segmented one - **so 1 wo
 | Variable             | Example Value                                             | Description                                                                                                                                                                                                  |
 |----------------------| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `USE_SEGMENTATOR`    | `False`                                                   | Enables or disables the motion-based segmentator. <br>• `True` → system automatically detects word boundaries. <br>• `False` → each `/predict_landmarks` request is treated as one complete sign (one word). |
+| `USE_SLIDING_WINDOW` | `True`                                                    | Enables sliding window detector with voting mechanism. <br>• `True` → continuous classification with stability checking. <br>• `False` → uses traditional segmenter only. |
+| `USE_HYBRID_MODE`    | `False`                                                   | **NEW!** Combines both segmenter and sliding window intelligently. <br>• `True` → uses adaptive strategy to merge results from both detectors. <br>• Provides best accuracy by leveraging strengths of both approaches. |
 | `SPECIAL_LABEL`   | `PUSH`                                                    | Special command label indicating the end of a sentence. When the classifier predicts `"PUSH"`, the backend generates the full sentence and resets internal memory.                                           |
 | `MODEL_PATH`     | `/app/app/model_logic/utils/model_configs/conf(large).pt` | Path to the ASL classifier model (`.pt`). The backend loads this model during startup.                                                                                                                       |
 | `POLISHING_MODEL_PATH` | `/app/app_models/qwen2.5-1.5b-instruct-q4_k_m.gguf`       | Path to the LLM used for sentence polishing (Qwen or another GGUF-based model).                                                                                                                              |
+| `MIN_CONFIDENCE_THRESHOLD` | `0.75`                                            | Master confidence threshold - filters ALL detections. <br>• Lower = more detections (higher recall). <br>• Higher = fewer false positives (higher precision). <br>• **Suggest: 0.75 for production** |
+| `USE_HYBRID_NORMALIZATION` | `True`                                            | **NEW!** Normalization method for hand landmarks. <br>• `False` → Wrist-centered (126 features). <br>• `True` → Hybrid with spatial context (138 features, better accuracy). <br>• **Note:** Model must be trained with corresponding method! |
+
+---
+
+### 🆕 Hybrid Mode Configuration (New Feature!)
+
+**Hybrid Mode** intelligently combines motion-based segmentation with continuous sliding window detection for optimal accuracy.
+
+#### Enable Hybrid Mode
+```env
+USE_HYBRID_MODE=True
+HYBRID_STRATEGY=adaptive  # Recommended
+```
+
+#### Key Hybrid Mode Parameters
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HYBRID_STRATEGY` | `adaptive` | Combination strategy:<br>• `adaptive` - IoU-based matching with conflict resolution ⭐<br>• `max_confidence` - Choose highest confidence<br>• `voting` - Majority voting<br>• `segmenter_primary` - Prefer segmenter<br>• `sliding_primary` - Prefer sliding |
+| `HYBRID_OVERLAP_THRESHOLD` | `0.5` | Minimum IoU (0.0-1.0) to match detections from both methods.<br>• `0.5` = 50% temporal overlap required<br>• Higher = stricter matching |
+| `HYBRID_AGREEMENT_BOOST` | `0.15` | Confidence boost when both methods agree (+15%)<br>• Rewards consensus between detectors |
+| `HYBRID_SOLO_DETECTION_MULTIPLIER` | `0.9` | **NEW!** Threshold multiplier for solo detections.<br>• Solo threshold = MIN_CONFIDENCE × 0.9<br>• Example: If MIN=0.75, solo needs 0.675<br>• Adjust: 0.85-0.95 |
+
+#### How Hybrid Mode Works
+
+1. **Both detectors run in parallel**
+   - Segmenter: Motion-based detection (good for clear gestures)
+   - Sliding Window: Continuous classification with voting (good for subtle gestures)
+
+2. **Adaptive strategy matches detections**
+   - High IoU + Same word → **BOOST** confidence (strong agreement)
+   - High IoU + Different words → **CONFLICT** resolution (choose higher confidence)
+   - Low IoU + Same word → Keep both (likely 2 separate occurrences)
+   - Solo detection → Add if confidence ≥ MIN_THRESHOLD × SOLO_MULTIPLIER
+
+3. **Temporal deduplication**
+   - Removes duplicates within 30 frames (~1 second)
+   - Keeps higher confidence detection
+
+#### Example Scenarios
+
+**Scenario 1: Agreement (Both detect same word)**
+```
+Segmenter: "HELLO", conf=0.85, frames=[10-35]
+Sliding:   "HELLO", conf=0.88, frames=[12-34]
+IoU = 0.92 (high overlap)
+→ Output: "HELLO", conf=1.0 (boosted!), frames=[12-34]
+```
+
+**Scenario 2: Solo Detection (Only sliding detected)**
+```
+Segmenter: (nothing - motion too subtle)
+Sliding:   "THANK", conf=0.72, frames=[90-110]
+Check: 0.72 >= 0.75 × 0.9 = 0.675 ✅
+→ Output: "THANK", conf=0.72 (sliding saved it!)
+```
+
+**Scenario 3: Conflict (Different words, same time)**
+```
+Segmenter: "WORLD", conf=0.75, frames=[50-75]
+Sliding:   "WORK",  conf=0.78, frames=[52-74]
+IoU = 0.88 (high overlap but different words)
+→ Output: "WORK", conf=0.74 (higher confidence wins with penalty)
+```
+
+---
+
+### Sliding Window Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SLIDING_WINDOW_STRIDE` | `5` | How often to classify (1=every frame, 5=every 5th)<br>• `1` = best accuracy, slower<br>• `5` = faster, good balance<br>• `10` = fastest, may miss quick gestures |
+| `SLIDING_WINDOW_VOTING_SIZE` | `20` | Number of recent predictions for voting<br>• Larger = more stable but slower to detect |
+| `SLIDING_WINDOW_VOTE_THRESHOLD` | `13` | Minimum votes to accept word (13/20 = 65%)<br>• `16` = 80% (stricter)<br>• `11` = 55% (more lenient) |
+| `SLIDING_WINDOW_MIN_CONFIDENCE` | `0.55` | Confidence threshold for individual predictions<br>• Lower than MIN_CONFIDENCE_THRESHOLD |
+
+---
+
+### Performance Tuning Guide
+
+#### For Higher Precision (Fewer False Positives)
+```env
+MIN_CONFIDENCE_THRESHOLD=0.80          # Was 0.75
+SLIDING_WINDOW_VOTE_THRESHOLD=16       # Was 13 (80% consensus)
+HYBRID_OVERLAP_THRESHOLD=0.6           # Was 0.5 (stricter matching)
+HYBRID_SOLO_DETECTION_MULTIPLIER=0.95  # Was 0.9 (stricter solo)
+```
+
+#### For Higher Recall (Catch More Gestures)
+```env
+MIN_CONFIDENCE_THRESHOLD=0.65          # Was 0.75
+SLIDING_WINDOW_STRIDE=1                # Was 5 (classify every frame)
+SLIDING_WINDOW_VOTE_THRESHOLD=11       # Was 13 (55% consensus)
+HYBRID_SOLO_DETECTION_MULTIPLIER=0.85  # Was 0.9 (more lenient solo)
+```
+
+#### For Best Performance (Speed)
+```env
+SLIDING_WINDOW_STRIDE=10               # Was 5 (classify every 10th frame)
+SLIDING_WINDOW_VOTING_SIZE=10          # Was 20 (smaller voting window)
+USE_HYBRID_MODE=False                  # Disable hybrid, use single detector
+```
+
+---
+
+### Configuration File Structure
+
+The configuration is now organized into **4 logical sections** in `/app/model_logic/utils/config.py`:
+
+1. **Core Detection** - Segmenter & Sliding Window settings
+2. **Hybrid Mode** - Adaptive combination parameters
+3. **Model & Preprocessing** - Model paths, normalization, data preparation
+4. **Performance** - Buffer management, flush settings
+
+Each variable includes:
+- 📝 Detailed description of what it does
+- 💡 Suggested values for different use cases
+- ⚠️ Warnings for critical parameters (e.g., DON'T CHANGE without retraining)
+- 🗑️ DEPRECATED markers for obsolete settings
 | `USE_T5`         | `False`                                                   | If `True`, the backend uses a T5 model for sentence polishing instead of Qwen. <br>Default: `False`.                                                                                                         |

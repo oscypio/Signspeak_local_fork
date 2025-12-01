@@ -184,7 +184,12 @@ class SlidingWindowDetector:
                     ]
                     word_confidence = np.mean(winner_confidences) if winner_confidences else 0.5
 
-                    return (top_word, word_confidence)
+                    # Estimate temporal boundaries based on voting window
+                    # Word was stable across voting_size frames
+                    estimated_end = self.total_frames  # Current frame
+                    estimated_start = max(0, estimated_end - self.voting_size)  # Start of voting window
+
+                    return (top_word, word_confidence, estimated_start, estimated_end)
 
         return None
 
@@ -193,7 +198,7 @@ class SlidingWindowDetector:
         frame_vecs: List[np.ndarray],
         classifier: Any,
         preparer: Any
-    ) -> List[Tuple[str, float]]:
+    ) -> List[Tuple[str, float, int, int]]:
         """
         Process multiple frames and return all detected words.
 
@@ -203,7 +208,7 @@ class SlidingWindowDetector:
             preparer: DataPreparer instance
 
         Returns:
-            List of (word, confidence) tuples
+            List of (word, confidence, start_frame, end_frame) tuples
         """
         detected = []
 
@@ -219,7 +224,7 @@ class SlidingWindowDetector:
         frame_vecs: List[np.ndarray],
         classifier: Any,
         preparer: Any
-    ) -> List[Tuple[str, float]]:
+    ) -> List[Tuple[str, float, int, int]]:
         """
         Optimized batch processing (for compatibility with PipelineManager).
         In this simple implementation, just call add_frames_batch.
@@ -231,7 +236,7 @@ class SlidingWindowDetector:
         classifier: Any,
         preparer: Any,
         min_confidence: float = None
-    ) -> Optional[Tuple[str, float]]:
+    ) -> Optional[Tuple[str, float, int, int]]:
         """
         Force emission of last word at end of batch.
 
@@ -241,7 +246,7 @@ class SlidingWindowDetector:
             min_confidence: Override min confidence (optional)
 
         Returns:
-            (word, confidence) if there's a word to emit, None otherwise
+            (word, confidence, start_frame, end_frame) if there's a word to emit, None otherwise
         """
         # Check voting deque
         if self.use_voting and len(self.voting_deque) >= self.vote_threshold:
@@ -254,7 +259,12 @@ class SlidingWindowDetector:
                 if top_word != self.last_emitted_word or self.frames_since_emission >= 15:
                     self.last_emitted_word = top_word
                     self.frames_since_emission = 0
-                    return (top_word, 0.8)
+
+                    # Estimate temporal boundaries for flushed word
+                    estimated_end = self.total_frames
+                    estimated_start = max(0, estimated_end - self.voting_size)
+
+                    return (top_word, 0.8, estimated_start, estimated_end)
 
         return None
 

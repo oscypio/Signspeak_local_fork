@@ -81,7 +81,9 @@ class HybridDetector:
             return sorted(segmenter_results, key=lambda x: x[2])
 
         # Apply strategy
-        if self.strategy == 'max_confidence':
+        if self.strategy == 'adaptive':
+            return self._combine_adaptive(segmenter_results, sliding_results)
+        elif self.strategy == 'max_confidence':
             return self._combine_max_confidence(segmenter_results, sliding_results)
         elif self.strategy == 'voting':
             return self._combine_voting(segmenter_results, sliding_results)
@@ -90,8 +92,8 @@ class HybridDetector:
         elif self.strategy == 'sliding_primary':
             return self._combine_sliding_primary(segmenter_results, sliding_results)
         else:
-            # Default to max_confidence
-            return self._combine_max_confidence(segmenter_results, sliding_results)
+            # Default to adaptive
+            return self._combine_adaptive(segmenter_results, sliding_results)
 
     def _combine_max_confidence(
         self,
@@ -317,35 +319,223 @@ class HybridDetector:
         self.stats['total_detections'] += len(combined)
         return combined
 
+    def _combine_adaptive(
+        self,
+        segmenter_results: List[Tuple[str, float, int, int]],
+        sliding_results: List[Tuple[str, float, int, int]],
+    ) -> List[Tuple[str, float, int, int]]:
+        """
+        Adaptive strategy - intelligently combines detections based on:
+        - Temporal overlap (IoU)
+        - Agreement (same word)
+        - Confidence levels
+        - Context awareness
+
+        Strategy:
+        1. High IoU + Same word → BOOST confidence (strong agreement)
+        2. Low IoU + Same word → Keep both (likely 2 occurrences)
+        3. High IoU + Different words → Take higher confidence (conflict resolution)
+        4. Only one detector → Take if confidence > threshold
+        """
+        combined = []
+        used_seg_indices = set()
+        used_slide_indices = set()
+
+        # Match detections based on temporal overlap
+        for seg_idx, (seg_word, seg_conf, seg_start, seg_end) in enumerate(segmenter_results):
+            best_match = None
+            best_iou = 0.0
+            best_slide_idx = -1
+
+            # Find sliding detections with temporal overlap
+            for slide_idx, (slide_word, slide_conf, slide_start, slide_end) in enumerate(sliding_results):
+                if slide_idx in used_slide_indices:
+                    continue
+
+                # Calculate temporal IoU
+                iou = self._calculate_temporal_iou(seg_start, seg_end, slide_start, slide_end)
+
+                if iou > best_iou:
+                    best_iou = iou
+                    best_match = (slide_word, slide_conf, slide_start, slide_end)
+                    best_slide_idx = slide_idx
+
+            # Decision based on IoU and word agreement
+            if best_match and best_iou > settings.HYBRID_OVERLAP_THRESHOLD:
+                slide_word, slide_conf, slide_start, slide_end = best_match
+
+                if seg_word == slide_word:
+                    # STRONG AGREEMENT: Same word + high IoU
+                    self.stats['agreements'] += 1
+                    self.stats['total_boosted'] += 1
+
+                    # Calibrate confidence based on IoU strength
+                    max_conf = max(seg_conf, slide_conf)
+                    if best_iou > 0.7:
+                        # Very high overlap
+                        boosted_conf = min(1.0, max_conf + self.agreement_boost)
+                    else:
+                        # Moderate overlap
+                        boosted_conf = min(1.0, max_conf + self.agreement_boost * 0.7)
+
+                    # Use boundaries from higher-confidence detection
+                    if seg_conf > slide_conf:
+                        combined.append((seg_word, boosted_conf, seg_start, seg_end))
+                        self.stats['segmenter_wins'] += 1
+                    else:
+                        combined.append((slide_word, boosted_conf, slide_start, slide_end))
+                        self.stats['sliding_wins'] += 1
+
+                    used_seg_indices.add(seg_idx)
+                    used_slide_indices.add(best_slide_idx)
+
+                else:
+                    # CONFLICT: Different words, high IoU
+                    self.stats['conflicts'] += 1
+
+                    # Take higher confidence, but apply penalty for disagreement
+                    if seg_conf > slide_conf + 0.1:  # Segmenter significantly more confident
+                        combined.append((seg_word, seg_conf * 0.95, seg_start, seg_end))
+                        self.stats['segmenter_wins'] += 1
+                        used_seg_indices.add(seg_idx)
+                    elif slide_conf > seg_conf + 0.1:  # Sliding significantly more confident
+                        combined.append((slide_word, slide_conf * 0.95, slide_start, slide_end))
+                        self.stats['sliding_wins'] += 1
+                        used_slide_indices.add(best_slide_idx)
+                    else:
+                        # Similar confidence - keep both (might be overlapping gestures)
+                        combined.append((seg_word, seg_conf * 0.9, seg_start, seg_end))
+                        combined.append((slide_word, slide_conf * 0.9, slide_start, slide_end))
+                        self.stats['disagreements'] += 1
+                        used_seg_indices.add(seg_idx)
+                        used_slide_indices.add(best_slide_idx)
+
+            elif best_match and seg_word == best_match[0]:
+                # LOW IoU but SAME WORD: Likely 2 separate occurrences
+                # Keep both if confidence is decent
+                if seg_conf >= 0.6:
+                    combined.append((seg_word, seg_conf, seg_start, seg_end))
+                    self.stats['segmenter_wins'] += 1
+                    used_seg_indices.add(seg_idx)
+                if best_match[1] >= 0.6:
+                    combined.append((best_match[0], best_match[1], best_match[2], best_match[3]))
+                    self.stats['sliding_wins'] += 1
+                    used_slide_indices.add(best_slide_idx)
+
+            else:
+                # ONLY SEGMENTER detected (no match or low IoU)
+                if seg_conf >= settings.MIN_CONFIDENCE_THRESHOLD * settings.HYBRID_SOLO_DETECTION_MULTIPLIER:
+                    combined.append((seg_word, seg_conf, seg_start, seg_end))
+                    self.stats['segmenter_wins'] += 1
+                    used_seg_indices.add(seg_idx)
+
+        # Add sliding-only detections that weren't matched
+        for slide_idx, (slide_word, slide_conf, slide_start, slide_end) in enumerate(sliding_results):
+            if slide_idx not in used_slide_indices:
+                if slide_conf >= settings.MIN_CONFIDENCE_THRESHOLD * settings.HYBRID_SOLO_DETECTION_MULTIPLIER:
+                    combined.append((slide_word, slide_conf, slide_start, slide_end))
+                    self.stats['sliding_wins'] += 1
+
+        self.stats['total_detections'] += len(combined)
+
+        # Sort by start frame
+        combined.sort(key=lambda x: x[2])
+
+        # Temporal deduplication
+        combined = self._deduplicate_temporal(combined)
+
+        return combined
+
     def _calculate_temporal_iou(
         self,
-        start1: int, end1: int,
-        start2: int, end2: int
+        start1: int,
+        end1: int,
+        start2: int,
+        end2: int
     ) -> float:
         """
         Calculate Intersection over Union for temporal segments.
 
+        IoU = |intersection| / |union|
+
         Args:
-            start1, end1: First segment boundaries (frame indices)
-            start2, end2: Second segment boundaries (frame indices)
+            start1, end1: First temporal segment (frames)
+            start2, end2: Second temporal segment (frames)
 
         Returns:
-            float: IoU in range [0, 1]
+            IoU value between 0.0 and 1.0
+
+        Example:
+            seg1 = [10, 30]  # 20 frames
+            seg2 = [20, 40]  # 20 frames
+            intersection = [20, 30]  # 10 frames
+            union = [10, 40]  # 30 frames
+            IoU = 10 / 30 = 0.33
         """
-        # Intersection
+        # Calculate intersection
         intersection_start = max(start1, start2)
         intersection_end = min(end1, end2)
-        intersection = max(0, intersection_end - intersection_start)
+        intersection_length = max(0, intersection_end - intersection_start)
 
-        # Union
+        # Calculate union
         union_start = min(start1, start2)
         union_end = max(end1, end2)
-        union = union_end - union_start
+        union_length = union_end - union_start
 
-        if union == 0:
+        # Avoid division by zero
+        if union_length == 0:
             return 0.0
 
-        return intersection / union
+        # IoU
+        iou = intersection_length / union_length
+        return iou
+
+
+    def _deduplicate_temporal(
+        self,
+        detections: List[Tuple[str, float, int, int]]
+    ) -> List[Tuple[str, float, int, int]]:
+        """
+        Remove duplicate detections based on:
+        - Same word
+        - Temporal proximity (< 30 frames / ~1 second)
+        - Keep higher confidence
+        """
+        if len(detections) <= 1:
+            return detections
+
+        deduplicated = []
+        skip_indices = set()
+
+        for i, (word1, conf1, start1, end1) in enumerate(detections):
+            if i in skip_indices:
+                continue
+
+            # Check for duplicates ahead
+            is_duplicate = False
+            for j in range(i + 1, len(detections)):
+                if j in skip_indices:
+                    continue
+
+                word2, conf2, start2, end2 = detections[j]
+
+                # Check if same word and temporally close
+                if word1 == word2:
+                    temporal_distance = abs(start2 - end1)
+
+                    if temporal_distance < 30:  # Less than 1 second apart
+                        # It's a duplicate - keep higher confidence
+                        if conf2 > conf1:
+                            is_duplicate = True
+                            skip_indices.add(i)
+                        else:
+                            skip_indices.add(j)
+                        break
+
+            if not is_duplicate:
+                deduplicated.append((word1, conf1, start1, end1))
+
+        return deduplicated
 
     def _deduplicate_by_word_with_temporal(
         self,
