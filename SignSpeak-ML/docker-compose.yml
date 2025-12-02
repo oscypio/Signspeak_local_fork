@@ -1,0 +1,18 @@
+
+services:
+  asl-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: asl-api
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+
+    volumes:
+      - ./app:/app/app
+
+      - ./app_models:/app/app_models

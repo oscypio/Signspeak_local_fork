@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic==1.10.15
+numpy==1.26.4
+torch==2.2.2+cpu
+--extra-index-url https://download.pytorch.org/whl/cpu
+llama-cpp-python
+transformers
+pytest==8.0.0
+

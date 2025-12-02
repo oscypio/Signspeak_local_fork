@@ -179,4 +179,15 @@ According to that:
 
 
 ## III. **ML System**
-<!-- Add your comment here -->
+The ML service is a FastAPI app (Dockerized) that receives hand landmarks, segments them into words, classifies signs, and optionally polishes the final sentence.
+
+- Run (dev): from `SignSpeak-ML/` use Docker Compose; the API listens on `http://localhost:8000` (health: `GET /health`).
+- Main endpoint:
+  - `POST /api/predict_landmarks` — body: a list of frames (FrameData). Returns a list of responses as words are detected or a sentence when finalized.
+- Utility endpoints:
+  - `POST /api/force_end_sentence` — forces sentence finalization from current buffered words (as if special label was predicted).
+  - `POST /api/reset_buffer` — clears internal word buffer (optionally sentences via `?clear_sentences=true`).
+- Payload shape (FrameData list): each frame includes `timestamp`, `sequenceNumber`, `receivedAt`, `landmarks` (2 hands × 21 points × {x,y,z,visibility}), and `handedness` (per-hand metadata).
+- Behavior: motion-based segmenter (configurable), GRU classifier for word prediction, and an LLM-based polisher (Qwen/T5). Special label (`SPECIAL_LABEL`, e.g., `PUSH`) triggers sentence completion.
+
+For detailed docs, examples, and configuration, see `SignSpeak-ML/README.md` (segmenter options, expected frames, models, env flags).
