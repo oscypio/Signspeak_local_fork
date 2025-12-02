@@ -1,122 +1,145 @@
-# SignSpeak API: A Simple Guide
+# SignSpeak ML API Documentation
 
 ## Table of Contents
 
-1. **What Does This Backend Do?**  
-
-2. **Quick Setup: Get Running in 3 Steps**  
-
-3. **How to Use the API (The Important Part!)**  
-   - The Key Endpoint: `/api/predict_landmarks`
-   - Utility Endpoints: Force end & reset buffer
-   - Full User Journey: A Realistic Conversation  
-   
-4. **Testing the API Yourself (Postman, Insomnia, or Code)**  
-
-5. **Where Do the AI Models Come From?**
-
-6. **Config for Development and Enhancements**
-   - Model Performance Metrics
-   - General Configuration
-   - Architecture Flow Diagram
+1. **Overview**
+2. **Quick Start**
+3. **API Endpoints**
+4. **Configuration Guide**
+5. **Model Performance**
+6. **Troubleshooting**
 
 ---
 
-# 1. What Does This Backend Do?
+# 1. Overview
 
-Think of this backend as the **brain that understands sign language**.  
-It doesn't need video — all it needs is **hand landmarks**, the (x, y, z) coordinates of 21 points per hand, frame by frame.
+SignSpeak ML is a **FastAPI-based microservice** for real-time sign language recognition. It processes hand landmark data and returns detected words or complete sentences.
 
-Here is how the system works:
+Attention - this Service requires proper frame buffering from the backend to function correctly in real-time scenarios.
 
-1. The **MediaPipe frontend** captures hand landmarks from a webcam (~30 fps).
-2. Hand landmarks are streamed via **WebSocket** to the Java backend.
-3. The **Java backend** buffers frames and sends batches (45 frames every 3s) to Python ML.
-4. The **Python ML backend**:
-   - Uses **Sliding Window Detector** with voting mechanism for continuous classification
-   - OR **Hybrid Mode** combining motion-based segmentation + sliding window
-   - Classifies gestures using a **GRU-based classifier**
-   - Applies **intelligent flush mechanism** at batch boundaries to prevent word loss ⭐ NEW!
-   - Stores predicted words in memory
-5. When the special sign **"PUSH"** arrives:
-   - Takes all saved words
-   - Feeds them into a **sentence-polishing model** (Qwen LLM)
-   - Returns a fully corrected English sentence
-   - Resets memory
+This Service **can also be used with video-translation** by sending pre-processed (with mediapipe) videos.
 
-📥 Landmarks → 🔄 Batch Processing → 🤖 AI Detection → 💾 Buffer Flush → 📝 Natural English sentence
+## What it does
 
-### 🆕 New Features (2025):
+- Receives **hand landmarks** (x, y, z coordinates for 21 points per hand)
+- Detects sign language gestures using **GRU-based classifier**
+- Supports multiple detection modes: **Sliding Window**, **Motion Segmenter**, or **Hybrid**
+- Polishes detected words into natural English sentences using **LLM** (Qwen or T5)
+- Returns results via **REST API**
 
-- ⚡ **Buffer Flush Mechanism** - Prevents losing last word at batch boundaries
-- 🔀 **Hybrid Mode** - Combines motion-based segmentation with continuous classification
-- 🗳️ **Voting System** - Sliding window with majority voting for stability
-- 🎯 **Confidence Tuning** - Separate thresholds for normal detection vs. flush
-- 📊 **Detailed Logging** - Track detection decisions, voting, and conflicts
-- 🔧 **Optimized Parameters** - Pre-configured scenarios for speed vs. quality
+## Pipeline Context
 
----
-
-# 2. Quick Setup: Get Running in 3 Steps
-
-### Prerequisites
-
-- Docker + Docker Compose  
-- (Optional) Python 3.10+ if running manually  
-
----
-
-## Step 1 — Clone the Repository
-
-```bash
-git clone https://github.com/your-username/SignSpeak.git
-cd SignSpeak
+This ML service is part of a larger system:
+```
+Frontend (MediaPipe) → Backend (Frame Buffering) → ML API → Results
 ```
 
+The ML API expects batches of landmarks (typically 30-60 frames) and returns detected words/sentences.
+
+## Key Features
+
+- ⚡ **Real-time detection** with buffer flush mechanism
+- 🔀 **Multiple detection modes** (Sliding Window, Segmenter, Hybrid)
+- 🗳️ **Voting-based stability** for continuous classification
+- 🎯 **Configurable confidence thresholds**
+- 📊 **Detailed logging** for debugging
+- 🔧 **Production-ready** with Docker support
+
+
 ---
 
-## Step 2 — Add the AI Models
+# 2. Quick Start
 
-Place your models inside:
+## Prerequisites
+
+- Docker + Docker Compose
+- Python 3.10+ (if running locally)
+- AI models (see below)
+
+## Installation
+
+### 1. Download Models
+
+Place models in `app_models/`:
 
 ```
 app_models/
-   qwen2.5-1.5b-instruct-q4_k_m.gguf <- polishing model
+├── conf_final_v3.3(hybrid_norm).pt  ← Classifier model
+└── qwen2.5-1.5b-instruct-q4_k_m.gguf ← Polishing model
 ```
 
-These files are **not included in the repository** - check https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/blob/main/qwen2.5-1.5b-instruct-q4_k_m.gguf for download.
+Download polishing model: [Qwen2.5-1.5B-Instruct-GGUF](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/blob/main/qwen2.5-1.5b-instruct-q4_k_m.gguf)
 
----
-
-## Step 3 — Run the API
-
-### Development mode
+### 2. Run with Docker
 
 ```bash
-docker compose -f docker-compose.yml up --build
+docker compose up --build
 ```
 
-Once running, you should see:
+API will be available at `http://localhost:8000`
 
+### 3. Verify Installation
+
+```bash
+curl http://localhost:8000/health
+# Expected: {"status": "ok"}
 ```
-Uvicorn running on http://0.0.0.0:8000
+
+## Local Development (without Docker)
+
+```bash
+cd app
+pip install -r requirements.txt
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ---
 
-# 3. How to Use the API (The Important Part!)
+# 3. API Endpoints
 
-The main entry point for the MediaPipe frontend is:
+## Main Endpoint
 
+### `POST /api/predict_landmarks`
+
+Processes hand landmark frames and returns detected words or sentences.
+
+**Request Body:**
+```json
+[
+  {
+    "timestamp": 1234.5,
+    "sequenceNumber": 1,
+    "receivedAt": 1234.5,
+    "landmarks": [
+      [
+        {"x": 0.5, "y": 0.5, "z": 0.0, "visibility": 0.99},
+        ...  // 21 points per hand
+      ]
+    ],
+    "handedness": [
+      [
+        {"score": 0.98, "index": 0, "categoryName": "Right", "displayName": "Right"}
+      ]
+    ]
+  }
+]
 ```
-POST /api/predict_landmarks
+
+**Response:**
+```json
+{
+  "results": [
+    {
+      "prediction": "HELLO",
+      "status": "word_added",
+      "current_words": ["HELLO"],
+      "detail": "Word added successfully"
+    }
+  ]
+}
 ```
 
-Each request corresponds to **one or multiple signs** and contains a list of frames.
-
-The App always returns **LIST** of responses untill the last `end of the sentence` - `{"results": **responses}`. When `USE_SEGMENTATOR` = `False` there is always only 1 element in the list.
-
-Warning - by default model will try and split uploaded landmarks into individual words - if that is unwanted, please see **config** section below.
+**Note:** Response is always a list. With `USE_SEGMENTATOR=False` and `USE_SLIDING_SEGMENTSTOR=False`, list contains only 1 element per request.
 
 ---
 
@@ -280,7 +303,7 @@ print(response.json())
 ### ASL Classifier (GRU)
 
 ```
-Model still under development - with basic configuration in conf.pt
+Model still under development - with basic configuration in .pt file
 ```
 
 ### Sentence Polisher (Qwen or T5)
@@ -292,11 +315,9 @@ app_models/qwen2.5-1.5b-instruct-q4_k_m.gguf
 
 ---
 
-# You’re Ready to Go 🎉
+# 5. Model Performance
 
-## 6. Config for Development
-
-Right now this app is in its **development** phase - the vocabulary is very limited:
+Current model (`conf_final_v3.3(hybrid_norm).pt`) performance:
 
 Current state (when using conf_final_v3.3(hybrid_norm).pt):
 
@@ -329,11 +350,15 @@ Glossary:
 | WANT      | 1.000     | 0.600  | 0.750    |
 
 
-Additionally, current **Segmenter** is based on holistics and best fitting parameters for current dataset.
-It may generate some additional loss because of that. To disable it, simply put `USE_SEGMENTATOR` to `False` in .env file.
-Then app will not segment input and will await already segmented one - **so 1 word for inputted frames**.
+**Note:** Current Segmenter uses heuristic motion detection optimized for the training dataset. To disable automatic segmentation, set `USE_SEGMENTATOR=False` and `USE_SLIDING_WINDOW=False`, as well as `USE_HYBRID_MODE=False` - the API will then treat each request as a single word.
 
-### Segmenter config - /app/model_logic/utils/config.py
+---
+
+# 4. Configuration Guide
+
+All configuration is in `/app/model_logic/utils/config.py`. Most important are also listed in `.env` file.
+
+## Detection Mode Settings
 | Variable           | Default Value | Description                                                                                           |
 | ------------------ | ------------- | ----------------------------------------------------------------------------------------------------- |
 | `MOTION_THRESHOLD` | `0.12`        | Minimal average motion required to consider that movement is happening. Helps detect start of a sign. |
@@ -353,17 +378,25 @@ Then app will not segment input and will await already segmented one - **so 1 wo
 | ---------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | `DEVICE`               | `"cpu"`                                                                     | Device used for inference.                                                     |
 
-### General Config - .env file
-| Variable             | Example Value                                             | Description                                                                                                                                                                                                  |
-|----------------------| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `USE_SEGMENTATOR`    | `False`                                                   | Enables or disables the motion-based segmentator. <br>• `True` → system automatically detects word boundaries. <br>• `False` → each `/predict_landmarks` request is treated as one complete sign (one word). |
-| `USE_SLIDING_WINDOW` | `True`                                                    | Enables sliding window detector with voting mechanism. <br>• `True` → continuous classification with stability checking. <br>• `False` → uses traditional segmenter only. |
-| `USE_HYBRID_MODE`    | `False`                                                   | **NEW!** Combines both segmenter and sliding window intelligently. <br>• `True` → uses adaptive strategy to merge results from both detectors. <br>• Provides best accuracy by leveraging strengths of both approaches. |
-| `SPECIAL_LABEL`   | `PUSH`                                                    | Special command label indicating the end of a sentence. When the classifier predicts `"PUSH"`, the backend generates the full sentence and resets internal memory.                                           |
-| `MODEL_PATH`     | `/app/app/model_logic/utils/model_configs/conf(large).pt` | Path to the ASL classifier model (`.pt`). The backend loads this model during startup.                                                                                                                       |
-| `POLISHING_MODEL_PATH` | `/app/app_models/qwen2.5-1.5b-instruct-q4_k_m.gguf`       | Path to the LLM used for sentence polishing (Qwen or another GGUF-based model).                                                                                                                              |
-| `MIN_CONFIDENCE_THRESHOLD` | `0.75`                                            | Master confidence threshold - filters ALL detections. <br>• Lower = more detections (higher recall). <br>• Higher = fewer false positives (higher precision). <br>• **Suggest: 0.75 for production** |
-| `USE_HYBRID_NORMALIZATION` | `True`                                            | **NEW!** Normalization method for hand landmarks. <br>• `False` → Wrist-centered (126 features). <br>• `True` → Hybrid with spatial context (138 features, better accuracy). <br>• **Note:** Model must be trained with corresponding method! |
+## Core Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `USE_SEGMENTATOR` | `False` | Motion-based word boundary detection.<br>• `True` → auto-detect word boundaries<br>• `False` → each request = 1 word |
+| `USE_SLIDING_WINDOW` | `True` | Continuous classification with voting.<br>• Recommended for real-time detection |
+| `USE_HYBRID_MODE` | `False` | Combines segmenter + sliding window.<br>• Best accuracy, higher latency |
+| `SPECIAL_LABEL` | `PUSH` | Word that triggers sentence finalization |
+| `MIN_CONFIDENCE_THRESHOLD` | `0.6` | Master threshold for all detections<br>• 0.75 recommended for production |
+| `USE_HYBRID_NORMALIZATION` | `True` | Landmark normalization method<br>• `True` → 138 features (better)<br>• `False` → 126 features<br>• **Must match training!** |
+
+## Model Paths
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MODEL_PATH` | `conf(large).pt` | GRU classifier model |
+| `POLISHING_MODEL_PATH` | `qwen2.5-1.5b-instruct-q4_k_m.gguf` | LLM for grammar correction |
+| `DEVICE` | `cpu` | Device for inference (`cpu` or `cuda`) |
+| `USE_T5` | `False` | Use T5 instead of Qwen for polishing |
 
 ---
 
@@ -500,14 +533,18 @@ In real-time sign language detection, frames arrive in **batches** (typically 30
 
 ### How Flush Works
 
+When frames arrive in batches, a gesture might be incomplete at batch boundaries:
+
 ```
-Batch 1: [HELLO frames... HE]  ← incomplete at end
-         ↓ Without flush: LOST
-         ↓ With flush: Emits "HELLO" (confidence 0.55+)
+Batch 1: [HELLO frames... HEL]  ← incomplete at end
+         ↓ Without flush: LOST (waits for silence that never comes)
+         ↓ With flush: Emits "HELLO" (confidence >= FLUSH_MIN)
          
-Batch 2: [LLO frames... WORLD frames...]
+Batch 2: [LO frames... WORLD frames...]
          ↓ Continues normally
 ```
+
+Flush ensures the last word in each batch is not lost while waiting for silence detection.
 
 ### Flush Configuration Parameters
 
@@ -517,82 +554,6 @@ Batch 2: [LLO frames... WORLD frames...]
 | `MIN_FRAMES_FOR_FLUSH` | `30` | Minimum frames in buffer before allowing flush.<br>• Too low (10-20) → May emit noise/fragments<br>• Too high (40+) → May not flush short gestures<br>• **Optimal:** 25-30 frames |
 | `FLUSH_MIN_CONFIDENCE` | `0.55` | Lower confidence threshold for flushed words.<br>• Lower than `MIN_CONFIDENCE_THRESHOLD` (0.6-0.65)<br>• Catches uncertain last words that might be valid<br>• **Optimal:** 0.50-0.58 |
 
-### Why Flush is Essential
-
-**Without Flush (FORCE_FLUSH_ON_BATCH_END=False):**
-```python
-# Segmenter waits for 6 frames silence
-# Batch ends with gesture still in progress
-if self.silence_count >= 6:  # Never happens at batch end!
-    return word  # Never executed
-# Result: segments = [] → return [] → ZERO detections ❌
-```
-
-**With Flush (FORCE_FLUSH_ON_BATCH_END=True):**
-```python
-# At batch end, force emission
-flushed_result = self.segmenter.flush_buffer()
-if flushed_result is not None:
-    # Classify buffered frames
-    word, confidence = classify(flushed_result)
-    if confidence >= FLUSH_MIN_CONFIDENCE:  # 0.55
-        return word  # Success! ✅
-```
-
-### Flush Optimization Scenarios
-
-#### Scenario A: Sliding Window Only (Fastest, Good Quality)
-```python
-USE_SLIDING_WINDOW = True
-USE_HYBRID_MODE = False
-MIN_CONFIDENCE_THRESHOLD = 0.65
-SLIDING_WINDOW_VOTING_SIZE = 25        # Larger voting window
-SLIDING_WINDOW_VOTE_THRESHOLD = 18     # 72% consensus
-MIN_FRAMES_FOR_FLUSH = 30
-FLUSH_MIN_CONFIDENCE = 0.55
-```
-
-#### Scenario B: Hybrid Mode (Best Quality, Slower)
-```python
-USE_HYBRID_MODE = True
-MIN_CONFIDENCE_THRESHOLD = 0.70
-SLIDING_WINDOW_VOTING_SIZE = 25
-SLIDING_WINDOW_VOTE_THRESHOLD = 18
-MIN_FRAMES_FOR_FLUSH = 25              # Lower for segmenter
-FLUSH_MIN_CONFIDENCE = 0.50            # More lenient (hybrid has 2 sources)
-HYBRID_SOLO_DETECTION_MULTIPLIER = 0.90
-```
-
-#### Scenario C: Balanced (Speed/Quality Compromise)
-```python
-USE_SLIDING_WINDOW = True
-MIN_CONFIDENCE_THRESHOLD = 0.68
-SLIDING_WINDOW_VOTING_SIZE = 22
-SLIDING_WINDOW_VOTE_THRESHOLD = 16     # ~73%
-MIN_FRAMES_FOR_FLUSH = 28
-FLUSH_MIN_CONFIDENCE = 0.58
-```
-
-### Java Backend Frame Selection (Complementary Settings)
-
-The Java backend (`FrameBufferService.java`) determines batch timing and size:
-
-```java
-@Scheduled(fixedRate = 3000)  // Process every 3 seconds (optimal)
-// was: 5000 (5 seconds - too slow)
-
-@Value("${frame.selection.count:45}")  // Send 45 frames per batch (optimal)
-// was: 30 (too few for complete gestures)
-```
-
-**Optimal Java Backend Settings:**
-- **Timer:** `3000ms` (3 seconds) - Frequent enough to catch gestures, not too aggressive
-- **Frame count:** `45 frames` - Provides enough context for Sliding Window (needs 60 total, overlap helps)
-
-**Why 45 frames?**
-- Typical gesture: 30-50 frames
-- Sliding Window buffer: 60 frames
-- With 45 frames + overlap from previous batch → sufficient context for voting mechanism
 
 ### Complete Flush Optimization Example
 
@@ -616,181 +577,126 @@ MIN_FRAMES_FOR_FLUSH = 30
 FLUSH_MIN_CONFIDENCE = 0.55
 ```
 
-2. **Update `FrameBufferService.java`:**
-```java
-@Scheduled(fixedRate = 3000)  // 3 seconds
-@Value("${frame.selection.count:45}")  // 45 frames
-```
 
-3. **Monitor logs:**
-```python
-LOG_MINIMAL = True
-LOG_VOTING = True  # See voting consensus
-LOG_FILTERING = True  # See confidence filtering
-```
 
 ### Troubleshooting Flush Issues
 
-| Problem | Solution |
-|---------|----------|
-| Last word always missing | Set `FORCE_FLUSH_ON_BATCH_END=True` |
-| Too many false positives at batch end | Increase `FLUSH_MIN_CONFIDENCE` to 0.60+ |
-| Fragments/noise in output | Increase `MIN_FRAMES_FOR_FLUSH` to 35-40 |
-| Short gestures not detected | Decrease `MIN_FRAMES_FOR_FLUSH` to 20-25 |
-| Detections are delayed | Decrease Java `fixedRate` to 2000-3000ms |
-| Buffer overflow errors | Increase Java `frame.selection.count` to 50-60 |
+| Problem | Solution                                                 |
+|---------|----------------------------------------------------------|
+| Last word always missing | Set `FORCE_FLUSH_ON_BATCH_END=True`                      |
+| Too many false positives at batch end | Increase `FLUSH_MIN_CONFIDENCE` to 0.60+                 |
+| Fragments/noise in output | Increase `MIN_FRAMES_FOR_FLUSH` to 35-40                 |
+| Short gestures not detected | Decrease `MIN_FRAMES_FOR_FLUSH` to 20-25                 |
+| Detections are delayed | Use faster approach - disable alternatives or change llm |
 
-### Real-World Example: How Flush Works Step-by-Step
 
-**Scenario:** User signs "HELLO" (3 seconds), pauses briefly (1 second), then signs "WORLD" (2 seconds)
 
-#### Timeline with Current Architecture:
-
-```
-T=0.0s → 3.0s: User signs "HELLO"
-├─ Frontend: MediaPipe detects hands → sends ~90 frames via WebSocket
-├─ Java Backend: Buffers frames in ConcurrentLinkedQueue
-└─ Timer hasn't triggered yet...
-
-T=3.0s → 4.0s: User pauses (no hands visible)
-├─ Frontend: MediaPipe detects NO hands → SENDS NOTHING
-└─ Java Backend: Buffer still holds ~90 frames from "HELLO"
-
-T=4.0s → 6.0s: User signs "WORLD"
-├─ Frontend: Sends ~60 more frames
-└─ Java Backend: Buffer now has ~150 frames total
-
-T=5.0s: ⏰ TIMER TRIGGERS (fixedRate = 5000ms)
-├─ Java Backend: processBuffer() executes
-│   ├─ Total frames in buffer: ~150
-│   ├─ Selects 30 evenly distributed frames
-│   └─ Sends to Python ML via HTTP POST
-│
-├─ Python ML: PipelineManager.process(30 frames)
-│   ├─ Sliding Window: Processes frames, fills voting buffer
-│   │   ├─ Window 1-60: Detects "HELLO" (confidence 0.88)
-│   │   ├─ Voting: 18/20 votes for "HELLO" → EMITS ✓
-│   │   └─ Remaining frames: partial "WORLD" data
-│   │
-│   ├─ END OF BATCH REACHED
-│   │
-│   ├─ FLUSH TRIGGERED (FORCE_FLUSH_ON_BATCH_END=True)
-│   │   ├─ Check voting buffer: 12/20 votes for "WORLD"
-│   │   ├─ Below threshold (13) but close...
-│   │   ├─ flush_buffer() forces emission
-│   │   ├─ Confidence: 0.58 (above FLUSH_MIN_CONFIDENCE=0.55) ✓
-│   │   └─ EMITS "WORLD" ✓
-│   │
-│   └─ Response: ["HELLO", "WORLD"]
-│
-└─ Java Backend: Clears buffer, continues...
-
-T=10.0s: ⏰ NEXT TIMER
-└─ Buffer is empty → skips processing
-```
-
-#### What Happens WITHOUT Flush (FORCE_FLUSH_ON_BATCH_END=False):
-
-```
-T=5.0s: TIMER TRIGGERS
-├─ Python ML: PipelineManager.process(30 frames)
-│   ├─ Sliding Window: Detects "HELLO" → EMITS ✓
-│   ├─ Voting buffer has 12/20 votes for "WORLD" (below threshold)
-│   ├─ END OF BATCH
-│   ├─ NO FLUSH → voting buffer contents DISCARDED
-│   └─ Response: ["HELLO"]  ← "WORLD" is LOST! ❌
-│
-└─ "WORLD" detection is gone forever
-```
-
-#### Key Observations:
-
-1. **Timer is independent of gesture timing**
-   - 5s timer can trigger mid-gesture
-   - Batch boundaries are arbitrary, not natural pause points
-
-2. **Frontend only sends frames with hands**
-   - No "silence" frames between gestures
-   - Segmenter can't detect word boundaries naturally
-
-3. **Flush rescues incomplete detections**
-   - Voting buffer at batch end may be close to threshold
-   - Flush uses lower confidence to catch these
-
-4. **30 frames is often insufficient**
-   - "HELLO" gesture: ~40-50 frames at 30fps
-   - 30 frames might only capture 60-70% of the gesture
-   - Flush allows classification of partial data
-
-### Architecture Flow Diagram
+### ML Processing Pipeline
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    FRONTEND (React + MediaPipe)              │
-│  • Captures webcam at ~30fps                                 │
-│  • MediaPipe detects hand landmarks                          │
-│  • Sends frames ONLY when hands detected                     │
+│                    INPUT: Batch of Frames                    │
+│  • Typically 30-60 frames from backend                       │
+│  • Each frame: hand landmarks (42 points × 4 coords)         │
 └────────────────────┬────────────────────────────────────────┘
-                     │ WebSocket (continuous stream)
                      ↓
 ┌─────────────────────────────────────────────────────────────┐
-│              JAVA BACKEND (Spring Boot + WebSocket)          │
-│  • Receives frames via WebSocket                             │
-│  • Buffers in ConcurrentLinkedQueue                          │
-│  • @Scheduled(fixedRate=3000) triggers every 3s              │
-│  • Selects 45 distributed frames from buffer                 │
-│  • Sends batch to Python ML                                  │
+│              1. DATA PREPARATION (DataPreparer)              │
+│  • Normalize landmarks (wrist-centered or hybrid)            │
+│  • Flatten to vectors (168 or 138 features)                  │
+│  • Optional: velocity + acceleration features                │
 └────────────────────┬────────────────────────────────────────┘
-                     │ HTTP POST (every 3s, 45 frames)
                      ↓
 ┌─────────────────────────────────────────────────────────────┐
-│              PYTHON ML (FastAPI + PyTorch)                   │
+│              2. DETECTION (choose mode)                      │
 │                                                              │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  1. PipelineManager receives batch                   │   │
-│  └───────────────────┬─────────────────────────────────┘   │
-│                      ↓                                       │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  2. Sliding Window Detector                          │   │
-│  │     • Builds 60-frame windows (stride=1)             │   │
-│  │     • Classifies each window → prediction            │   │
-│  │     • Voting buffer (20 predictions)                 │   │
-│  │     • Emits word when 18/20 agree                    │   │
-│  └───────────────────┬─────────────────────────────────┘   │
-│                      ↓                                       │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  3. END OF BATCH - Flush Decision Point              │   │
-│  │     IF FORCE_FLUSH_ON_BATCH_END = True:              │   │
-│  │       • Check voting buffer                          │   │
-│  │       • If word has 70% votes (flexible threshold)   │   │
-│  │       • AND confidence >= FLUSH_MIN_CONFIDENCE       │   │
-│  │       • EMIT word (prevents loss)                    │   │
-│  └───────────────────┬─────────────────────────────────┘   │
-│                      ↓                                       │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  4. Word Buffer & Response                           │   │
-│  │     • Accumulates words: ["HELLO", "WORLD"]          │   │
-│  │     • Returns to Java Backend                        │   │
-│  └─────────────────────────────────────────────────────┘   │
+│  [Sliding Window Mode]         [Hybrid Mode]                │
+│  • Build 60-frame windows      • Run both detectors         │
+│  • Classify each window        • Match by temporal IoU      │
+│  • Voting: 18/20 consensus     • Boost on agreement         │
+│  • Emit stable predictions     • Resolve conflicts          │
+│                                                              │
+│  [Segmenter Mode]                                           │
+│  • Detect motion/silence                                     │
+│  • Segment by boundaries                                     │
+│  • Classify segments                                         │
 └────────────────────┬────────────────────────────────────────┘
-                     │ JSON Response
                      ↓
 ┌─────────────────────────────────────────────────────────────┐
-│              FRONTEND - Display Results                      │
-│  • Shows detected words in real-time                         │
-│  • User sees: "HELLO WORLD"                                  │
-└─────────────────────────────────────────────────────────────┘
+│              3. FLUSH MECHANISM (batch end)                  │
+│  IF FORCE_FLUSH_ON_BATCH_END = True:                         │
+│    • Check detector buffers                                  │
+│    • Emit pending words (confidence >= FLUSH_MIN)            │
+│    • Prevents losing last word in batch                      │
+└────────────────────┬────────────────────────────────────────┘
+                     ↓
+┌─────────────────────────────────────────────────────────────┐
+│              4. CLASSIFICATION (GRUClassifier)               │
+│  • GRU-based neural network                                  │
+│  • Input: (60, features) normalized sequence                 │
+│  • Output: word probabilities                                │
+│  • Filter by MIN_CONFIDENCE_THRESHOLD                        │
+└────────────────────┬────────────────────────────────────────┘
+                     ↓
+┌─────────────────────────────────────────────────────────────┐
+│              5. WORD BUFFERING                               │
+│  • Accumulate words: ["HELLO", "WORLD"]                      │
+│  • Wait for SPECIAL_LABEL (e.g., "PUSH")                     │
+└────────────────────┬────────────────────────────────────────┘
+                     ↓
+┌─────────────────────────────────────────────────────────────┐
+│              6. SENTENCE POLISHING (on SPECIAL_LABEL)        │
+│  • LLM (Qwen or T5) corrects grammar                         │
+│  • "HELLO WORLD" → "Hello, world!"                           │
+│  • Clear buffer, return sentence                             │
+└────────────────────┬────────────────────────────────────────┘
+                     ↓
+                  RESPONSE
 ```
 
 ---
 
-| `USE_T5`         | `False`                                                   | If `True`, the backend uses a T5 model for sentence polishing instead of Qwen. <br>Default: `False`.                                                                                                         |
+---
+
+# 6. Troubleshooting
+
+## Common Issues
+
+| Problem | Solution |
+|---------|----------|
+| Last word always missing | Set `FORCE_FLUSH_ON_BATCH_END=True` |
+| Too many false positives | Increase `MIN_CONFIDENCE_THRESHOLD` to 0.70+ |
+| Detections too slow | Increase `SLIDING_WINDOW_STRIDE` to 5 or 10 |
+| Short gestures not detected | Decrease `MIN_FRAMES_FOR_FLUSH` to 20-25 |
+| Noisy/fragment detections | Increase `FLUSH_MIN_CONFIDENCE` to 0.60+ |
+
+## Logging Configuration
+
+```python
+# For debugging
+ENABLE_DETAILED_LOGGING = True
+LOG_VOTING = True
+LOG_FILTERING = True
+LOG_HYBRID_DECISIONS = True  # If using hybrid mode
+
+# For production
+LOG_MINIMAL = True
+ENABLE_DETAILED_LOGGING = False
+```
+
+## Performance Benchmarks
+
+| Configuration | Latency | Accuracy | CPU Usage |
+|--------------|---------|----------|-----------|
+| Sliding Window (stride=1) | ~500ms | 87% | Medium |
+| Sliding Window (stride=5) | ~300ms | 83% | Low |
+| Hybrid Mode | ~700ms | 91% | High |
 
 ---
 
 # 🚀 Quick Reference Guide
 
-## Most Important Settings for Production
+## Most Important Settings for Production - Real-Time use
 
 ### 1. Enable Flush 
 ```python
@@ -815,6 +721,33 @@ USE_HYBRID_MODE = True
 MIN_CONFIDENCE_THRESHOLD = 0.65  # Master threshold
 FLUSH_MIN_CONFIDENCE = 0.55      # Lower for flush
 ```
+
+## Most Important Settings for Production - Video-Translation use
+
+### 1. Enable Flush 
+```python
+# config.py
+FORCE_FLUSH_ON_BATCH_END = True  # preffered, but False cna also work
+MIN_FRAMES_FOR_FLUSH = 30
+FLUSH_MIN_CONFIDENCE = 0.4 # dependent on the video cuts
+```
+
+### 2. Choose Detection Mode
+```python
+# Option A: Motion-Segmenter Only (recommended for accuracy)
+USE_SEGMENTER = True
+USE_HYBRID_MODE = False
+
+# Option B: Hybrid Mode (use for fast-paced videos)
+USE_HYBRID_MODE = True
+```
+
+### 3. Set Confidence Thresholds
+```python
+MIN_CONFIDENCE_THRESHOLD = 0.75  # Master threshold
+FLUSH_MIN_CONFIDENCE = 0.4      # Lower for flush (for the last word)
+```
+** The numbers proposed can be not optimal for your usage **
 
 ## Critical Troubleshooting Checklist
 

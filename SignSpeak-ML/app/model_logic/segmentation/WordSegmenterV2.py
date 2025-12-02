@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """
+***OBSOLETE***
+
 WordSegmenterV2: High-ROI improvements for word segmentation.
 
 Key features:

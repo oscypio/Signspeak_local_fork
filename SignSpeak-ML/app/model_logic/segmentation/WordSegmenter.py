@@ -1,3 +1,14 @@
+"""
+Motion-based Segmenter for ASL keypoint sequences.
+
+Best in video segmentation or real-life with continuous dataflow.
+
+Flush makes it suitable for limited-efficiency work even with always visible stream of landmarks.
+
+"""
+
+
+
 import numpy as np
 from ..utils.config import settings
 from ..utils.logger import logger

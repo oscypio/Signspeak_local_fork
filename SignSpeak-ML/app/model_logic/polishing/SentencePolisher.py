@@ -1,3 +1,9 @@
+"""
+Module for polishing ASL gloss sentences into natural English.
+Uses a local LLaMA model for text generation.
+"""
+
+
 from llama_cpp import Llama
 from ..utils.config import settings
 
@@ -49,10 +55,9 @@ class SentencePolisher:
         - Do NOT list alternatives.
         - Do NOT explain anything.
         - Do NOT repeat the input.
-        - Remove same words from sentence.
         - Do NOT output anything except the final sentence.
         - Try to make it sound natural and with sense.
-        - Reorder words, so that the sentence have the most sense.
+        - Reorder and/or delete words, so that the sentence have the most sense.
         - Add punctuation as needed.
         
         ASL gloss: {sentence}

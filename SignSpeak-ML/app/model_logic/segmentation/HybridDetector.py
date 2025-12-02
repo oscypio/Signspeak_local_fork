@@ -5,14 +5,6 @@ This module intelligently combines traditional motion-based segmentation
 with sliding window detection to achieve better accuracy by leveraging
 the strengths of both approaches.
 
-Key Features:
-- Runs both detectors in parallel
-- Combines results using configurable strategies
-- Boosts confidence when both methods agree
-- Falls back to stronger method when one fails
-- Uses temporal information (IoU) to match detections
-
-Author: SignSpeak Team
 """
 
 from typing import List, Tuple, Dict, Any

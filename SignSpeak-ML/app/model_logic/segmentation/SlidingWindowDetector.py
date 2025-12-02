@@ -1,15 +1,8 @@
 """
-Voting-Based Sliding Window Detector - Improved Implementation
+Voting-Based Sliding Window Detector
 
-Inspired by session_state.py voting mechanism.
-Key improvements:
-- Stride=1 (classify every frame)
-- Fixed buffer size (60 frames)
-- Voting mechanism (22 predictions, requires 16/22)
-- Better stability and accuracy
+Best in real-time always present (always visible) landmarks stream.
 
-Author: SignSpeak Team
-Date: 2025-01-30
 """
 
 import numpy as np
