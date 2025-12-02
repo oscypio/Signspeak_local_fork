@@ -78,9 +78,12 @@ function HomePage({ onNavigate }) {
             <div>
               <h3>Pause with a Sign</h3>
               <p>
-                When you want to pause or stop the translation, you don't need to look for a button.
-                Simply perform our designated "Stop" gesture (e.g., hold a flat palm up to the camera). 
-                The app will recognize this sign and pause the translation, giving you full control without breaking your flow.
+                When you want to pause or finish a sentence, you don't need to press a button.
+                Simply perform our designated gesture (holding flat both palms up toward the camera).
+                The app translates your signing continuously, updating the text gesture by gesture.
+                When it detects the designated gesture, it stops collecting new input and reprocesses 
+                the current sentence to correct and finalize it — producing a fluent, 
+                coherent translation of the signs you performed up to that point.
                 Ready to go? You're all set to bridge the gap.
               </p>
             </div>
