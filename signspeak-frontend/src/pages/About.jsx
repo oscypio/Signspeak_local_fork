@@ -9,11 +9,18 @@ function About({onNavigate}) {
                     <div className="text-section">
                         <h1>About</h1>
                         <p className="about-text">
-                            SignSpeak was born from a simple idea: communication is a universal human right, but not yet a universal reality. We saw a gap between communities and believed that technology could be the bridge.
+                            SignSpeak was born from a simple idea: communication is a universal human right, but not yet a universal reality. 
+                            We saw a gap between communities and believed that technology could be the bridge.
                             <br />
-                            Our Mission: Our mission is to break down communication barriers between the Deaf and hearing communities. We are dedicated to creating intuitive, AI-powered tools that make conversations in American Sign Language (ASL) accessible to everyone, on any platform, without the need for expensive hardware or human interpreters.
+                            Our Mission: Our mission is to break down communication barriers between the Deaf and hearing communities. 
+                            We are dedicated to creating intuitive, AI-powered tools that make conversations in American Sign Language (ASL) 
+                            accessible to everyone, on any platform, without the need for expensive hardware or human interpreters.
                             <br />
-                            How It Works: We use cutting-edge AI and machine learning to analyze ASL gestures directly from your webcam. Our models interpret these dynamic signs in real-time, converting them into spoken or written text. This creates a seamless experience that allows for fluid conversation. We are committed to building a more inclusive and connected world, one sign at a time.
+                            How It Works: We use cutting-edge AI and machine learning to analyze ASL gestures directly from your webcam.  
+                            The system translates each sign as you perform it, updating the text continuously.  
+                            When you make the designated gesture to complete a sentence, the app reprocesses the entire sequence and generates a corrected, 
+                            fluent translation that reflects the meaning of your full message.  
+                            This creates a natural, accessible communication flow without requiring any additional hardware.
                         </p>
                     </div>
                     <div className="imagine-container">
@@ -44,7 +51,7 @@ function About({onNavigate}) {
                                 </svg>
                             </div>
                             <h3 className="member-name">Elena Martinez Vazquez</h3>
-                            <p className="member-role">UX/UI Designer & Frontend Developer</p>
+                            <p className="member-role">UX/UI Designer • Frontend Developer</p>
                             <p className="member-description">Creates accessible and intuitive user experiences.</p>
                         </div>
 
@@ -66,7 +73,7 @@ function About({onNavigate}) {
                                 </svg>
                             </div>
                             <h3 className="member-name">Mohamed Salah Abdelaziz Mohamed Heikal</h3>
-                            <p className="member-role">Product Manager & ML Engineer</p>
+                            <p className="member-role">Product Manager • ML Engineer</p>
                             <p className="member-description">Coordinates the ML pipeline and business/technical alignment.</p>
                         </div>
 
