@@ -9,7 +9,7 @@ server:
 
 ml:
   system:
-    url: http://localhost:8081/ml/process #Link to ml system
+    url: http://localhost:8000/api/predict_landmarks #Url to ml system
 
 frame:
   selection:
