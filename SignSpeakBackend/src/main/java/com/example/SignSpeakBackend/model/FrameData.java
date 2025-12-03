@@ -151,4 +151,41 @@ public class FrameData {
             this.displayName = displayName;
         }
     }
+
+    public static class UserInfo {
+        private String meetingId;
+        private String userStatus;
+
+        public UserInfo() {}
+
+        public String getMeetingId() {
+            return meetingId;
+        }
+
+        public void setMeetingId(String meetingId) {
+            this.meetingId = meetingId;
+        }
+
+        public String getUserStatus() {
+            return userStatus;
+        }
+
+        public void setUserStatus(String userStatus) {
+            this.userStatus = userStatus;
+        }
+
+
+
+    }
+    private UserInfo userInfo;
+
+    // Nuovo!
+    public UserInfo getUserInfo() {
+        return userInfo;
+    }
+
+    // Nuovo!
+    public void setUserInfo(UserInfo userInfo) {
+        this.userInfo = userInfo;
+    }
 }
