@@ -5,6 +5,7 @@ import VideoDisplay from '../components/VideoDisplay';
 import { HiMiniSpeakerWave } from "react-icons/hi2";
 import { MdOutlineTextIncrease, MdOutlineTextDecrease } from "react-icons/md";
 import { FiSettings } from "react-icons/fi";
+import { VscDebugRestart } from "react-icons/vsc";
 
 function TranslationPage() {
     const {
@@ -12,7 +13,8 @@ function TranslationPage() {
         translatedText, partialWords, readAloud,
         fontSize, increaseFont, decreaseFont,
         videoRef, pipWindow,
-        setShowConfigModal
+        setShowConfigModal,
+        restartTranslation
     } = useTranslation();
 
 
@@ -40,6 +42,9 @@ function TranslationPage() {
                         <button className="translated-text" onClick={readAloud}><HiMiniSpeakerWave /></button>
                         <button className="increase-font" onClick={increaseFont}><MdOutlineTextIncrease /></button>
                         <button className="decrease-font" onClick={decreaseFont}><MdOutlineTextDecrease /></button>
+                        <button className="restart-btn" onClick={restartTranslation} title="Clear Context">
+                            <VscDebugRestart />
+                        </button>
                     </div>
                 </div>
             </section>

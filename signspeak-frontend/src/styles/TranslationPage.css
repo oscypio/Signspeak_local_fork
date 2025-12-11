@@ -137,7 +137,8 @@ body {
 .translated-text,
 .increase-font,
 .decrease-font,
-.text-edit {
+.text-edit,
+.restart-btn {
     width: 55px;
     height: 55px;
     border: none;
@@ -176,6 +177,9 @@ body {
 
     .result-text {
         min-height: 250px;
+    }
+    .result-text span {
+        white-space: pre-wrap;
     }
 }
 

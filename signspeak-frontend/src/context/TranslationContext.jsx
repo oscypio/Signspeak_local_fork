@@ -123,8 +123,9 @@ export const TranslationProvider = ({ children }) => {
     const [mediaStream, setMediaStream] = useState(null);
     const [isWebcamOn, setIsWebcamOn] = useState(false);
     const [status, setStatus] = useState('IDLE');
-    const [translatedText, setTranslatedText] = useState('');
+    const [history, setHistory] = useState([]);
     const [partialWords, setPartialWords] = useState([]);
+    const translatedText = history.join('\n');
     const [pipWindow, setPipWindow] = useState(null);
 
     const processingVideoRef = useRef(null);
@@ -163,10 +164,12 @@ export const TranslationProvider = ({ children }) => {
                 } else if (data.type === "PARTIAL" && data.words) {
                     setPartialWords(data.words);
                 } else if (data.type === "FINAL" && data.text) {
-                    setTranslatedText(data.text);
+                    setHistory(prev => [...prev, data.text]);
+                    setPartialWords([]);
+                } else if (data.type === "CLEAR") {
                     setPartialWords([]);
                 } else if (data.text && !data.type) {
-                    setTranslatedText(data.text);
+                    setHistory(prev => [...prev, data.text]);
                 }
             } catch (error) { console.error("JSON Error:", error); }
         }
@@ -177,6 +180,11 @@ export const TranslationProvider = ({ children }) => {
     };
 
     const connectToWebSocket = async (overrideMeetingId = null, overrideUserStatus = null, autoStartCamera = true) => {
+        if (wsManager.stompClient && wsManager.stompClient.connected) {
+            console.log("Existing connection found. Disconnecting first...");
+            wsManager.disconnect();
+        }
+
         const currentId = overrideMeetingId ?? meetingIdRef.current ?? meetingId ?? "";
         let currentStatus = overrideUserStatus || userStatus;
 
@@ -186,14 +194,13 @@ export const TranslationProvider = ({ children }) => {
             autoStartCamera = true;
         }
 
-        console.log(`[Connection Start] ID: ${currentId}, Role: ${currentStatus}, , AutoStartCam: ${autoStartCamera}`);
-
+        console.log(`[Connection Start] ID: ${currentId}, Role: ${currentStatus}, AutoStartCam: ${autoStartCamera}`);
 
         if (autoStartCamera) {
             setStatus('CONNECTING');
         }
 
-        setTranslatedText('');
+        setHistory([]);
         setPartialWords([]);
 
         wsManager.connect({
@@ -291,11 +298,25 @@ export const TranslationProvider = ({ children }) => {
     };
 
     const readAloud = () => {
-        const text = translatedTextRef.current || "No text";
+        const text = history[history.length -1] || "No text";
         if (meetingIdRef.current && wsManager.stompClient && wsManager.stompClient.connected)  {
             wsManager.sendAudioTrigger(text, meetingIdRef.current);
         }  else {
             triggerLocalSpeech(text);
+        }
+    };
+
+    const restartTranslation = () => {
+        if (partialWords.length > 0) {
+            setPartialWords([]);
+            const currentId = meetingIdRef.current || "";
+            if (wsManager && wsManager.stompClient && wsManager.stompClient.connected) {
+                console.log("Clearing Buffer (Partial)");
+                wsManager.sendClearBuffer(currentId);
+            }
+        } else {
+            console.log("Undoing last sentence");
+            setHistory(prev => prev.slice(0, -1)); // Rimuove l'ultimo elemento array
         }
     };
 
@@ -314,8 +335,6 @@ export const TranslationProvider = ({ children }) => {
                 width: pipWidth,
                 height: pipHeight
             });
-
-            //newPipWindow.resizeTo(pipWidth, pipHeight);
 
             copyStyles(document, newPipWindow.document);
 
@@ -364,7 +383,8 @@ export const TranslationProvider = ({ children }) => {
         videoRef,
         fontSize, increaseFont, decreaseFont,
         pipWindow,
-        showConfigModal, setShowConfigModal
+        showConfigModal, setShowConfigModal,
+        restartTranslation,
     };
 
     return (
@@ -418,6 +438,7 @@ export const TranslationProvider = ({ children }) => {
                     increaseFont={increaseFont}
                     decreaseFont={decreaseFont}
                     readAloud={readAloud}
+                    restartTranslation={restartTranslation}
                 />,
                 pipWindow.document.body
             )}

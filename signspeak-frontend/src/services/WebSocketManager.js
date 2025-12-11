@@ -113,4 +113,21 @@ export class WebSocketManager {
         });
     }
 
+    /**
+     * Send a command to clear the translation buffer on the backend
+     */
+    sendClearBuffer(meetingId) {
+        if (!this.stompClient || !this.stompClient.connected) return;
+
+        const payload = {
+            type: "CLEAR",
+            meetingId: meetingId || ""
+        };
+
+        this.stompClient.publish({
+            destination: '/app/clear', // Assicurati che il Backend gestisca questo endpoint o gestiscilo in '/app/frame' con un flag
+            body: JSON.stringify(payload)
+        });
+    }
+
 }

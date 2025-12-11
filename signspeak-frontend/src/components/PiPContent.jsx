@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { HiMiniSpeakerWave } from "react-icons/hi2";
 import { MdOutlineTextIncrease, MdOutlineTextDecrease } from "react-icons/md";
+import { VscDebugRestart } from "react-icons/vsc";
 
 const PiPContent = ({
                         isDeaf,
@@ -12,7 +13,8 @@ const PiPContent = ({
                         fontSize,
                         increaseFont,
                         decreaseFont,
-                        readAloud
+                        readAloud,
+                        restartTranslation
                     }) => {
     const videoRef = useRef(null);
 
@@ -22,7 +24,7 @@ const PiPContent = ({
             videoRef.current.srcObject = stream;
             videoRef.current.play().catch(e => console.log("PiP play error", e));
         }
-    }, [stream]);
+    }, [stream, isDeaf]);
 
     return (
         <div className="pip-wrapper" style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '20px', boxSizing: 'border-box' }}>
@@ -38,13 +40,15 @@ const PiPContent = ({
                 marginBottom: isDeaf ? '20px' : '0' ,
                 display: isDeaf ? 'block' : 'none'
             }}>
-                <video
-                    ref={videoRef}
-                    style={{ width: '100%', borderRadius: '8px', transform: 'scaleX(-1)', background: 'black' }}
-                    autoPlay
-                    muted
-                    playsInline
-                />
+                {isDeaf && (
+                    <video
+                        ref={videoRef}
+                        style={{ width: '100%', borderRadius: '8px', transform: 'scaleX(-1)', background: 'black' }}
+                        autoPlay
+                        muted
+                        playsInline
+                    />
+                )}
             </div>
 
             {!isDeaf && (
@@ -58,7 +62,7 @@ const PiPContent = ({
                 </div>
             )}
 
-            {/* Video Section (Solo Deaf) */}
+            {/* Video Section Controls (Solo Deaf) */}
             {isDeaf ? (
                 <button className="start-btn" onClick={toggleWebcam} style={{ width: '100%', marginBottom: '20px' }}>
                     {isWebcamOn ? "Stop" : "Start"}
@@ -98,6 +102,11 @@ const PiPContent = ({
                     <button className="translated-text" onClick={readAloud}><HiMiniSpeakerWave /></button>
                     <button className="increase-font" onClick={increaseFont}><MdOutlineTextIncrease /></button>
                     <button className="decrease-font" onClick={decreaseFont}><MdOutlineTextDecrease /></button>
+                    {isDeaf && (
+                        <button className="restart-btn" onClick={restartTranslation} title="Clear & Restart">
+                            <VscDebugRestart />
+                        </button>
+                    )}
                 </div>
             </div>
         </div>
