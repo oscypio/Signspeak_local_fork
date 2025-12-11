@@ -87,4 +87,27 @@ public class WebSocketController {
             logger.error("Error in broadcastAudio", e);
         }
     }
+
+
+    @MessageMapping("/clear")
+    public void clearSession(@Payload Map<String, String> payload) {
+        String meetingId = payload.get("meetingId");
+        logger.info("Received CLEAR command for meeting: {}", meetingId);
+
+        if (USE_SIMULATION) {
+            simulatedTranslationService.stopSimulation(meetingId);
+        }
+
+        frameBufferService.clearBuffer();
+
+        if (meetingId != null && !meetingId.isEmpty()) {
+            Map<String, String> response = new HashMap<>();
+            response.put("type", "CLEAR");
+            response.put("meetingId", meetingId);
+
+            String destination = "/topic/meeting/" + meetingId;
+            template.convertAndSend(destination, response);
+            logger.info("Broadcasted CLEAR to {}", destination);
+        }
+    }
 }

@@ -6,51 +6,74 @@ import org.springframework.stereotype.Service;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.*;
 
 @Service
 public class SimulatedTranslationService {
 
     private final SimpMessagingTemplate messagingTemplate;
 
+    private final Map<String, Future<?>> activeSimulations = new ConcurrentHashMap<>();
+    private final ExecutorService executorService = Executors.newCachedThreadPool();
+
     public SimulatedTranslationService(SimpMessagingTemplate messagingTemplate) {
         this.messagingTemplate = messagingTemplate;
     }
 
-    public void sendSimulatedTranslation(String meetingId) {
-        String destination = "/topic/meeting/" + meetingId;
-
-        try {
-            // 1. Parola 1
-            Map<String, Object> partial1 = new HashMap<>();
-            partial1.put("type", "PARTIAL");
-            partial1.put("words", List.of("HELLO"));
-            messagingTemplate.convertAndSend(destination, partial1);
-            Thread.sleep(800); // Ritardo per effetto visivo
-
-            // 2. Parola 2
-            Map<String, Object> partial2 = new HashMap<>();
-            partial2.put("type", "PARTIAL");
-            partial2.put("words", List.of("HELLO", "FROM"));
-            messagingTemplate.convertAndSend(destination, partial2);
-            Thread.sleep(800);
-
-            // 3. Parola 3
-            Map<String, Object> partial3 = new HashMap<>();
-            partial3.put("type", "PARTIAL");
-            partial3.put("words", List.of("HELLO", "FROM", "BACKEND"));
-            messagingTemplate.convertAndSend(destination, partial3);
-            Thread.sleep(800);
-
-            // 4. Frase Finale
-            Map<String, Object> finalMsg = new HashMap<>();
-            finalMsg.put("type", "FINAL");
-            finalMsg.put("text", "Hello from Backend! The connection works.");
-            messagingTemplate.convertAndSend(destination, finalMsg);
-
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+    /**
+     * Interrompe qualsiasi simulazione attiva per questo meetingId
+     */
+    public void stopSimulation(String meetingId) {
+        Future<?> future = activeSimulations.remove(meetingId);
+        if (future != null && !future.isDone()) {
+            future.cancel(true);
+            System.out.println("Simulation STOPPED for meeting: " + meetingId);
         }
+    }
 
-        System.out.println("Simulated sequence sent to: " + destination);
+    public void sendSimulatedTranslation(String meetingId) {
+        stopSimulation(meetingId);
+
+        Future<?> future = executorService.submit(() -> {
+            String destination = "/topic/meeting/" + meetingId;
+            try {
+                if (Thread.currentThread().isInterrupted()) return;
+                sendPartial(destination, List.of("HELLO"));
+                Thread.sleep(800);
+
+                if (Thread.currentThread().isInterrupted()) return;
+                sendPartial(destination, List.of("HELLO", "FROM"));
+                Thread.sleep(800);
+
+                if (Thread.currentThread().isInterrupted()) return;
+                sendPartial(destination, List.of("HELLO", "FROM", "BACKEND"));
+                Thread.sleep(800);
+
+                if (Thread.currentThread().isInterrupted()) return;
+                sendFinal(destination, "Hello from Backend! The connection works.");
+
+            } catch (InterruptedException e) {
+                System.out.println("Simulation INTERRUPTED via CLEAR command.");
+                Thread.currentThread().interrupt();
+            } finally {
+                activeSimulations.remove(meetingId);
+            }
+        });
+
+        activeSimulations.put(meetingId, future);
+    }
+
+    private void sendPartial(String destination, List<String> words) {
+        Map<String, Object> msg = new HashMap<>();
+        msg.put("type", "PARTIAL");
+        msg.put("words", words);
+        messagingTemplate.convertAndSend(destination, msg);
+    }
+
+    private void sendFinal(String destination, String text) {
+        Map<String, Object> msg = new HashMap<>();
+        msg.put("type", "FINAL");
+        msg.put("text", text);
+        messagingTemplate.convertAndSend(destination, msg);
     }
 }

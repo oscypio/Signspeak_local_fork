@@ -55,4 +55,8 @@ public class FrameBufferService {
         }
         return frames;
     }
+
+    public void clearBuffer() {
+        this.buffer.clear();
+    }
 }
