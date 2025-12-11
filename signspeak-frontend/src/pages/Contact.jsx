@@ -53,7 +53,7 @@ function Contact({onNavigate}) {
                             Contact us for support, feedback, or any questions about SignSpeak.
                             <br /><br />
                             If you would like to report an issue, learn more about our technology,
-                            or help us improve communication accessibility — we would love to hear from you.
+                            or help us improve communication accessibility. We would love to hear from you.
                         </p>
                     </div>
 

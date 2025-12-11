@@ -12,15 +12,14 @@ function About({onNavigate}) {
                             SignSpeak was born from a simple idea: communication is a universal human right, but not yet a universal reality. 
                             We saw a gap between communities and believed that technology could be the bridge.
                             <br />
-                            Our Mission: Our mission is to break down communication barriers between the Deaf and hearing communities. 
+                            Our Mission is to break down communication barriers between the deaf and hearing communities.
                             We are dedicated to creating intuitive, AI-powered tools that make conversations in American Sign Language (ASL) 
                             accessible to everyone, on any platform, without the need for expensive hardware or human interpreters.
                             <br />
-                            How It Works: We use cutting-edge AI and machine learning to analyze ASL gestures directly from your webcam.  
-                            The system translates each sign as you perform it, updating the text continuously.  
-                            When you make the designated gesture to complete a sentence, the app reprocesses the entire sequence and generates a corrected, 
-                            fluent translation that reflects the meaning of your full message.  
-                            This creates a natural, accessible communication flow without requiring any additional hardware.
+                            How It Works: We use AI to analyze ASL gestures directly from your webcam in real-time.
+                            The system provides immediate feedback, showing partial words as you sign, and automatically refines the sequence into fluent English sentences using a Large Language Model.
+                            Designed for seamless integration, SignSpeak uses a Picture-in-Picture overlay that floats over any video app, so you never lose eye contact.
+                            If a sign is misunderstood, the Restart button lets you instantly clear the context and correct yourself, ensuring a natural and accurate communication flow.
                         </p>
                     </div>
                     <div className="imagine-container">
@@ -83,7 +82,7 @@ function About({onNavigate}) {
                                     <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
                                 </svg>
                             </div>
-                            <h3 className="member-name">Kuessin-Ansan Manuel DJIYEHOUE</h3>
+                            <h3 className="member-name">Kuessi-Ansan Ansan Manuel DJIYEHOUE</h3>
                             <p className="member-role">Backend Developer</p>
                             <p className="member-description">Builds APIs, WebSockets and ensures real-time communication.</p>
                         </div>

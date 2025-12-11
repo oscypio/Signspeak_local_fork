@@ -55,36 +55,30 @@ function HomePage({ onNavigate }) {
           <div className="step">
             <div className="step-number">1</div>
             <div>
-              <h3>Share This Window</h3>
-              <p>First, join your video call on any platform (like Google Meet, Zoom, or Teams).
-                Once you're in the call, use that platform's "Share Screen" or "Present" feature. 
-                When it asks what to share, be sure to select this SignSpeak browser window.
-                This is how everyone else in the call will be able to read your live translation.</p>
+              <h3>Choose Your Mode</h3>
+              <p>For video calls, generate a Meeting ID and share it with your colleagues so they can read subtitles on their devices.
+                  Just want to talk face-to-face? Skip the setup!
+                  Simply click Start to use Local Mode instantly for in-person conversations without any internet configuration.</p>
             </div>
           </div>
           <div className="step">
             <div className="step-number">2</div>
             <div>
-              <h3>Start Translating</h3>
+              <h3>Launch Picture-in-Picture</h3>
               <p>
-                After you've started sharing your screen, come back to this window and click the "Start Translating" button.
-                Your browser will ask for permission to use your camera. Please click "Allow". 
-                This is essential for the app to see your signs and begin translating.
+                  Don't hide your video call or your other apps! Click "Setup for meeting" and select "Launch PiP".
+                  This detaches the translation window, allowing you to float the subtitles right on top of Zoom, Google Meet, or Teams, so you never lose eye contact.
               </p>
             </div>
           </div>
           <div className="step">
             <div className="step-number">3</div>
             <div>
-              <h3>Pause with a Sign</h3>
+              <h3>Sign & Correct</h3>
               <p>
-                When you want to pause or finish a sentence, you don't need to press a button.
-                Simply perform our designated gesture (holding flat both palms up toward the camera).
-                The app translates your signing continuously, updating the text gesture by gesture.
-                When it detects the designated gesture, it stops collecting new input and reprocesses 
-                the current sentence to correct and finalize it — producing a fluent, 
-                coherent translation of the signs you performed up to that point.
-                Ready to go? You're all set to bridge the gap.
+                  Start signing slowly and clearly. The AI will show partial words in gray as you move, giving you instant feedback.
+                  Once you finish a sentence, it automatically refines it into fluent English.
+                  Made a mistake? Just hit the Restart Icon to instantly clear the buffer and start the phrase over.
               </p>
             </div>
           </div>

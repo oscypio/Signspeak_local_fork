@@ -8,43 +8,39 @@ function FAQ() {
     const faqs = [
         {
             question: "What is SignSpeak?",
-            answer: "SignSpeak is an AI-powered platform that translates sign language gestures into text and speech in real-time. It uses advanced computer vision and machine learning to recognize hand movements and convert them into understandable communication.",
+            answer: "SignSpeak is an AI-powered web application that translates American Sign Language (ASL) into text and speech in real-time. It uses a smart Picture-in-Picture overlay to work seamlessly on top of any video calling platform like Zoom, Google Meet, or Teams.",
         },
         {
-            question: "How accurate is the sign language recognition?",
-            answer: "Our AI model achieves over 95% accuracy in recognizing common sign language gestures. The accuracy improves with clear lighting, proper hand positioning, and consistent signing patterns. We continuously update our models to improve recognition accuracy.",
+            question: "How accurate is the translation?",
+            answer: "SignSpeak uses a two-step process to ensure accuracy. First, it recognizes individual signs in real-time providing instant feedback. Then, once you finish a sentence, a Large Language Model refines the sequence into fluent, grammatically correct English.",
         },
         {
             question: "Which sign languages are supported?",
-            answer: "Currently, SignSpeak supports American Sign Language (ASL), British Sign Language (BSL), and International Sign. We're actively working on adding support for more regional sign languages including ASL variations used in different countries.",
+            answer: "Currently, SignSpeak is specialized in American Sign Language (ASL). We are focused on perfecting the ASL recognition model before expanding to other sign languages like BSL or IS.",
         },
         {
-            question: "Do I need special equipment to use SignSpeak?",
-            answer: "No special equipment is required! SignSpeak works with any standard webcam or device camera. For best results, we recommend good lighting and a clear background behind the signer.",
+            question: "Do I need to install plugins or special cameras?",
+            answer: "No! SignSpeak works directly in your browser (Chrome or Edge recommended) with your standard webcam. There is no need to install plugins or buy special hardware. We use a 'Local Mode' for face-to-face chat and a 'Meeting ID' system for remote syncing.",
         },
         {
-            question: "Is SignSpeak free to use?",
-            answer: "Yes, SignSpeak offers a free tier with basic translation features. We also offer premium plans for businesses and educational institutions that include advanced features, higher usage limits, and priority support.",
+            question: "How does the 'Picture-in-Picture' mode work?",
+            answer: "This is our key feature! Instead of sharing your screen, you launch a floating window that stays on top of your other apps. This allows you to see the translation subtitles right next to the person you are talking to on Zoom or Meet, without hiding their video.",
         },
         {
-            question: "Can SignSpeak work in real-time conversations?",
-            answer: "Yes! SignSpeak processes gestures in real-time with minimal latency (typically under 200ms). This makes it suitable for live conversations, video calls, and interactive communication.",
+            question: "Does it work on mobile phones?",
+            answer: "SignSpeak is optimized for Desktop/Laptop browsers (Chrome, Edge) to leverage the advanced Picture-in-Picture API and processing power required for the AI. While the website is responsive, the translation features work best on a computer.",
         },
         {
             question: "How does SignSpeak protect my privacy?",
-            answer: "We take privacy seriously. Video data is processed locally on your device whenever possible, and we never store your video recordings without explicit permission. All data transmission is encrypted, and we comply with GDPR and other privacy regulations.",
+            answer: "We take privacy very seriously. The video analysis (hand tracking) happens locally on your device using MediaPipe. We do not stream your raw video to our servers—only the abstract coordinates of your hand movements are sent to generate the translation.",
         },
         {
-            question: "Can I use SignSpeak on mobile devices?",
-            answer: "Yes, SignSpeak is fully responsive and works on smartphones and tablets. We also offer dedicated mobile apps for iOS and Android with optimized performance for mobile cameras.",
+            question: "What if the system misinterprets a sign?",
+            answer: "It happens! That's why we included a 'Restart' button. If you see the real-time feedback is incorrect, you can instantly clear the current sentence and start over to ensure your message is conveyed clearly.",
         },
         {
-            question: "What if the system doesn't recognize my signs?",
-            answer: "If recognition issues occur, try adjusting your lighting, ensuring your hands are fully visible, or signing more slowly. You can also report unrecognized signs to help us improve our AI models. Our support team is always available to help troubleshoot.",
-        },
-        {
-            question: "How can I contribute to improving SignSpeak?",
-            answer: "We welcome community contributions! You can help by providing feedback, reporting recognition errors, participating in our beta testing program, or contributing to our open-source gesture dataset. Contact us for more information about getting involved.",
+            question: "Is SignSpeak free?",
+            answer: "Yes, SignSpeak is currently a free-to-use tool designed to break down communication barriers and improve accessibility for the Deaf community.",
         },
     ]
 
@@ -64,17 +60,17 @@ function FAQ() {
             <section className="faq-content">
                 <div className="faq-container">
                     {faqs.map((faq, index) => (
-                    <div key={index} className={`faq-item ${openIndex === index ? "active" : ""}`}>
-                        <button className="faq-question" onClick={() => toggleFAQ(index)} aria-expanded={openIndex === index}>
-                            <span>{faq.question}</span>
-                            {openIndex === index ? <FaChevronUp /> : <FaChevronDown />}
-                        </button>
-                        {openIndex === index && (
-                        <div className="faq-answer">
-                            <p>{faq.answer}</p>
+                        <div key={index} className={`faq-item ${openIndex === index ? "active" : ""}`}>
+                            <button className="faq-question" onClick={() => toggleFAQ(index)} aria-expanded={openIndex === index}>
+                                <span>{faq.question}</span>
+                                {openIndex === index ? <FaChevronUp /> : <FaChevronDown />}
+                            </button>
+                            {openIndex === index && (
+                                <div className="faq-answer">
+                                    <p>{faq.answer}</p>
+                                </div>
+                            )}
                         </div>
-                        )}
-                    </div>
                     ))}
                 </div>
             </section>
