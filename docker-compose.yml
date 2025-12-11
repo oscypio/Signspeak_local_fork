@@ -24,6 +24,10 @@ services:
     container_name: signspeak-backend
     ports:
       - "8080:8080"
+    environment:
+      - ML_SYSTEM_URL=http://signspeak-ml:8000/api/predict_landmarks # Added for proper communication with ML service - change if needed
+    depends_on:
+      - signspeak-ml
 
 #  signspeak-frontend:
 #    build:

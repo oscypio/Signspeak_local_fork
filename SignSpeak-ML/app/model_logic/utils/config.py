@@ -84,10 +84,10 @@ class Settings(BaseSettings):
     SLIDING_WINDOW_USE_VOTING: bool = True
 
     # How many recent predictions to store for voting
-    SLIDING_WINDOW_VOTING_SIZE: int = int(os.getenv('SLIDING_WINDOW_VOTING_SIZE', 20))  # Suggest: 22 for stride=1
+    SLIDING_WINDOW_VOTING_SIZE: int = int(os.getenv('SLIDING_WINDOW_VOTING_SIZE', 3))  # Suggest: 22 for stride=1
 
     # Minimum votes required (out of VOTING_SIZE) to accept word
-    SLIDING_WINDOW_VOTE_THRESHOLD: int = int(os.getenv('SLIDING_WINDOW_VOTE_THRESHOLD', 13))  # 65% by default, suggest: 16 for 80%
+    SLIDING_WINDOW_VOTE_THRESHOLD: int = int(os.getenv('SLIDING_WINDOW_VOTE_THRESHOLD', 2))  # 65% by default, suggest: 16 for 80%
 
     # DEPRECATED: Old stability counting method (use voting instead)
     SLIDING_WINDOW_STABILITY_COUNT: int = int(os.getenv('SLIDING_WINDOW_STABILITY_COUNT', 3))  # Not used with voting
@@ -154,6 +154,14 @@ class Settings(BaseSettings):
     # Use T5 for polishing instead of Qwen (experimental)
     USE_T5: bool = os.getenv('USE_T5', False)
 
+    # ===== POLISHING PARAMETERS =====
+
+    # LLM generation parameters for sentence polishing
+    POLISHING_MAX_TOKENS: int = int(os.getenv('POLISHING_MAX_TOKENS', 80))  # Max length of polished sentence
+    POLISHING_TEMPERATURE: float = float(os.getenv('POLISHING_TEMPERATURE', 0.35))  # Higher = more creative (0.0-1.0)
+    POLISHING_TOP_P: float = float(os.getenv('POLISHING_TOP_P', 0.9))  # Nucleus sampling threshold
+    POLISHING_REPEAT_PENALTY: float = float(os.getenv('POLISHING_REPEAT_PENALTY', 1.1))  # Penalty for repeating tokens
+
     # ===== DATA PREPROCESSING =====
 
     # Expected sequence length for model input (MUST match training)
@@ -182,6 +190,13 @@ class Settings(BaseSettings):
 
     # Lower confidence threshold for flush (catches uncertain last words that might be valid)
     FLUSH_MIN_CONFIDENCE: float = 0.5  # Lower than MIN_CONFIDENCE_THRESHOLD
+
+    # ===== BUFFER RESET (After Word Detection) =====
+
+    # Reset detector buffers after successful word detection (prevents contamination)
+    # When enabled, clears frame buffers, voting queues, and motion state after each detected word
+    # This prevents old data from influencing future predictions
+    RESET_BUFFER_AFTER_DETECTION: bool = os.getenv('RESET_BUFFER_AFTER_DETECTION', 'True').lower() in ('true', '1', 'yes')
 
     # ========================================================================
     # 5. LOGGING & DEBUGGING

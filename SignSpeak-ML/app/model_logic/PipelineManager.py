@@ -176,6 +176,12 @@ class PipelineManager:
                 logger.log_final_prediction(word, confidence, "SLIDING")
                 self.word_buffer.append(word)
                 responses.append(generate_given_word_response(word, self.word_buffer, confidence))
+
+                # Reset buffer after successful detection if enabled
+                if settings.RESET_BUFFER_AFTER_DETECTION:
+                    self.sliding_detector.reset()
+                    # Restore global frame offset after reset
+                    self.sliding_detector.global_frame_offset = self.global_frame_counter
             else:
                 logger.log_confidence_filter_reject(word, confidence, settings.MIN_CONFIDENCE_THRESHOLD,
                                                    "SLIDING", (start_frame, end_frame))
@@ -310,6 +316,12 @@ class PipelineManager:
                 logger.log_final_prediction(word, confidence, "SEGMENTER")
                 self.word_buffer.append(word)
                 responses.append(generate_given_word_response(word, self.word_buffer, confidence))
+
+                # Reset buffer after successful detection if enabled
+                if settings.RESET_BUFFER_AFTER_DETECTION:
+                    self.segmenter.reset()
+                    # Restore global frame offset after reset
+                    self.segmenter.global_frame_offset = self.global_frame_counter
             else:
                 logger.log_confidence_filter_reject(word, confidence, settings.MIN_CONFIDENCE_THRESHOLD,
                                                    "SEGMENTER", (start_f, end_f) if start_f is not None else None)
@@ -486,6 +498,14 @@ class PipelineManager:
                 logger.log_final_prediction(word, confidence, "HYBRID")
                 self.word_buffer.append(word)
                 responses.append(generate_given_word_response(word, self.word_buffer, confidence))
+
+                # Reset both detector buffers after successful detection if enabled
+                if settings.RESET_BUFFER_AFTER_DETECTION:
+                    self.segmenter.reset()
+                    self.sliding_detector.reset()
+                    # Restore global frame offsets after reset
+                    self.segmenter.global_frame_offset = self.global_frame_counter
+                    self.sliding_detector.global_frame_offset = self.global_frame_counter
             else:
                 logger.log_confidence_filter_reject(word, confidence, settings.MIN_CONFIDENCE_THRESHOLD,
                                                    "HYBRID", (start_f, end_f))
