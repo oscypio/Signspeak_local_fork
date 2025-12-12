@@ -39,12 +39,10 @@ function TranslationPage() {
                         {!translatedText && partialWords.length === 0 && <span style={{ color: '#ccc' }}>Waiting...</span>}
                     </div>
                     <div className="translation-actions">
-                        <button className="translated-text" onClick={readAloud}><HiMiniSpeakerWave /></button>
-                        <button className="increase-font" onClick={increaseFont}><MdOutlineTextIncrease /></button>
-                        <button className="decrease-font" onClick={decreaseFont}><MdOutlineTextDecrease /></button>
-                        <button className="restart-btn" onClick={restartTranslation} title="Clear Context">
-                            <VscDebugRestart />
-                        </button>
+                        <button className="translated-text" onClick={readAloud} data-tooltip="Read translation aloud for all"><HiMiniSpeakerWave /></button>
+                        <button className="increase-font" onClick={increaseFont} data-tooltip="Increase font size"><MdOutlineTextIncrease /></button>
+                        <button className="decrease-font" onClick={decreaseFont} data-tooltip="Decrease font size"><MdOutlineTextDecrease /></button>
+                        <button className="restart-btn" onClick={restartTranslation} data-tooltip="Undo the last sentence."><VscDebugRestart /> </button>
                     </div>
                 </div>
             </section>

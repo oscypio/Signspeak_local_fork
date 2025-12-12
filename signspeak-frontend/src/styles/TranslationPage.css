@@ -150,14 +150,55 @@ body {
     align-items: center;
     justify-content: center;
     transition: transform 0.2s, color 0.2s;
+    position: relative;
 }
 
 .translated-text:hover,
 .increase-font:hover,
 .decrease-font:hover,
-.text-edit:hover {
+.restart-btn:hover {
     transform: scale(1.1);
     color: #183651;
+}
+
+.translation-actions button[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+
+    position: absolute;
+    top: 95%;
+    left: 50%;
+    transform: translateX(-50%);
+
+    background-color: #e8f8fb;
+    color: #183651;
+
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    line-height: 1.3;
+    text-align: center;
+
+    width: max-content;
+    max-width: 220px;
+    white-space: normal;
+
+    box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+    z-index: 1000;
+    pointer-events: none;
+
+    animation: tooltipFadeIn 0.2s ease-out forwards;
+}
+
+@keyframes tooltipFadeIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, 5px);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
 }
 
 /* RESPONSIVE */

@@ -99,11 +99,11 @@ const PiPContent = ({
                 </div>
 
                 <div className="translation-actions" style={{ marginTop: '10px' }}>
-                    <button className="translated-text" onClick={readAloud}><HiMiniSpeakerWave /></button>
-                    <button className="increase-font" onClick={increaseFont}><MdOutlineTextIncrease /></button>
-                    <button className="decrease-font" onClick={decreaseFont}><MdOutlineTextDecrease /></button>
+                    <button className="translated-text" onClick={readAloud} data-tooltip="Read translation aloud for all"><HiMiniSpeakerWave /></button>
+                    <button className="increase-font" onClick={increaseFont} data-tooltip="Increase font size"><MdOutlineTextIncrease /></button>
+                    <button className="decrease-font" onClick={decreaseFont} data-tooltip="Decrease font size"><MdOutlineTextDecrease /></button>
                     {isDeaf && (
-                        <button className="restart-btn" onClick={restartTranslation} title="Clear & Restart">
+                        <button className="restart-btn" onClick={restartTranslation} data-tooltip="Undo the last sentence.">
                             <VscDebugRestart />
                         </button>
                     )}
