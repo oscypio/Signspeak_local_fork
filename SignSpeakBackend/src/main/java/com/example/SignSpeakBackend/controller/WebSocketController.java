@@ -100,6 +100,10 @@ public class WebSocketController {
 
         frameBufferService.clearBuffer();
 
+        if (!USE_SIMULATION) {
+            mlSystemService.resetMLContext();
+        }
+
         if (meetingId != null && !meetingId.isEmpty()) {
             Map<String, String> response = new HashMap<>();
             response.put("type", "CLEAR");

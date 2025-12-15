@@ -86,4 +86,15 @@ public class MLSystemService {
             messagingTemplate.convertAndSend(destination, message);
         }
     }
+
+    public void resetMLContext() {
+        try {
+            String url = mlSystemUrl.replace("/predict_landmarks", "/reset_buffer");
+            restTemplate.postForObject(url, null, String.class);
+            logger.info("Sent RESET command to ML Service");
+        } catch (Exception e) {
+            logger.error("Failed to reset ML Service: {}", e.getMessage());
+
+        }
+    }
 }
