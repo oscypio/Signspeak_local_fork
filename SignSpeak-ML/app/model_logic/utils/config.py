@@ -68,10 +68,10 @@ class Settings(BaseSettings):
 
     # Stride - how often to classify (1 = every frame, 5 = every 5th frame)
     # Lower stride = more predictions = better accuracy but slower
-    SLIDING_WINDOW_STRIDE: int = int(os.getenv('SLIDING_WINDOW_STRIDE', 1))  # Suggest: 1 for best accuracy, 5 for speed
+    SLIDING_WINDOW_STRIDE: int = int(os.getenv('SLIDING_WINDOW_STRIDE', 3))  # Suggest: 1 for best accuracy, 5 for speed
 
     # Minimum confidence for individual predictions (before voting)
-    SLIDING_WINDOW_MIN_CONFIDENCE: float = float(os.getenv('SLIDING_WINDOW_MIN_CONFIDENCE', 0.51))
+    SLIDING_WINDOW_MIN_CONFIDENCE: float = float(os.getenv('SLIDING_WINDOW_MIN_CONFIDENCE', 0.5))
 
     # Buffer size (should equal WINDOW_SIZE)
     SLIDING_WINDOW_MAX_BUFFER: int = int(os.getenv('SLIDING_WINDOW_MAX_BUFFER', 60))
@@ -157,10 +157,10 @@ class Settings(BaseSettings):
     # ===== POLISHING PARAMETERS =====
 
     # LLM generation parameters for sentence polishing
-    POLISHING_MAX_TOKENS: int = int(os.getenv('POLISHING_MAX_TOKENS', 80))  # Max length of polished sentence
-    POLISHING_TEMPERATURE: float = float(os.getenv('POLISHING_TEMPERATURE', 0.35))  # Higher = more creative (0.0-1.0)
-    POLISHING_TOP_P: float = float(os.getenv('POLISHING_TOP_P', 0.9))  # Nucleus sampling threshold
-    POLISHING_REPEAT_PENALTY: float = float(os.getenv('POLISHING_REPEAT_PENALTY', 1.1))  # Penalty for repeating tokens
+    POLISHING_MAX_TOKENS: int = int(os.getenv('POLISHING_MAX_TOKENS', 32))  # Max length of polished sentence
+    POLISHING_TEMPERATURE: float = float(os.getenv('POLISHING_TEMPERATURE', 0))  # Higher = more creative (0.0-1.0)
+    POLISHING_TOP_P: float = float(os.getenv('POLISHING_TOP_P', 1))  # Nucleus sampling threshold
+    POLISHING_REPEAT_PENALTY: float = float(os.getenv('POLISHING_REPEAT_PENALTY', 1))  # Penalty for repeating tokens
 
     # ===== DATA PREPROCESSING =====
 

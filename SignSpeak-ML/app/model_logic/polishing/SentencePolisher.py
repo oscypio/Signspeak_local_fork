@@ -2,7 +2,7 @@
 Module for polishing ASL gloss sentences into natural English.
 Uses a local LLaMA model for text generation.
 """
-
+import os
 
 from llama_cpp import Llama
 from ..utils.config import settings
@@ -13,9 +13,12 @@ class SentencePolisher:
         print(f"Loading polishing model: {model_path}")
         self.llm = Llama(
             model_path=model_path,
-            n_ctx=2048,  # Increased from 1024 for longer prompts with few-shot examples
-            n_threads=8,  # Increased from 6 for better CPU utilization
-            verbose=False
+            n_ctx=256,  # Increased from 1024 for longer prompts with few-shot examples
+            n_threads=min(8, os.cpu_count()),
+            verbose=False,
+            n_gpu_layers=1,  # Enable GPU acceleration if available
+            use_mmap = True,
+            use_mlock = False
         )
 
     def remove_adjacent_duplicates(self, sentence: str) -> str:
@@ -61,6 +64,8 @@ English: Where are you going tomorrow?
 
 ASL: PLEASE HELP ME FIND PHONE
 English: Please help me find my phone.
+
+Attention: Output ONLY the English sentence without any additional text.
 
 ASL: {sentence}
 English:"""
