@@ -20,9 +20,7 @@ public class SimulatedTranslationService {
         this.messagingTemplate = messagingTemplate;
     }
 
-    /**
-     * Interrompe qualsiasi simulazione attiva per questo meetingId
-     */
+
     public void stopSimulation(String meetingId) {
         Future<?> future = activeSimulations.remove(meetingId);
         if (future != null && !future.isDone()) {

@@ -76,7 +76,6 @@ public class WebSocketController {
                 Map<String, String> response = new HashMap<>();
                 response.put("type", "AUDIO_COMMAND");
                 response.put("text", textToSpeak);
-                // Aggiungiamo anche meetingId per sicurezza nel filtro frontend
                 response.put("meetingId", meetingId);
 
                 String destination = "/topic/meeting/" + meetingId;

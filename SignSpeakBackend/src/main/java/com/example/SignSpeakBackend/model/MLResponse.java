@@ -11,7 +11,7 @@ public class MLResponse {
 
     public static class MLResult {
         private String prediction;
-        private String status; // "word_added" oppure "end_of_sentence"
+        private String status; // "word_added" - "end_of_sentence"
 
         @JsonProperty("current_words")
         private List<String> currentWords;

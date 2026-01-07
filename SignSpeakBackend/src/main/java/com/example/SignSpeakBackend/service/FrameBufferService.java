@@ -18,8 +18,6 @@ public class FrameBufferService {
     private final ConcurrentLinkedQueue<FrameData> buffer = new ConcurrentLinkedQueue<>();
     private final AtomicInteger sequenceCounter = new AtomicInteger(0);
 
-    // Quanti frame accumulare prima di inviare al ML (es. 15 frame = 0.5 secondi a 30fps)
-    // Questa variabile sostituisce la vecchia "frameSelectionCount"
     private int chunkThreshold = 10;
 
     public int getNextSequenceNumber() {
@@ -38,13 +36,11 @@ public class FrameBufferService {
         return chunkThreshold;
     }
 
-    // --- METODO AGGIUNTO PER CORREGGERE L'ERRORE ---
     public void setChunkThreshold(int chunkThreshold) {
         this.chunkThreshold = chunkThreshold;
     }
 
     /**
-     * Estrae tutti i frame correnti dal buffer e lo svuota.
      * Thread-safe.
      */
     public List<FrameData> getAndClearBuffer() {

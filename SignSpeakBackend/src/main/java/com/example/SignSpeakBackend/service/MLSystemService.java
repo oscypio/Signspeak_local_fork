@@ -21,7 +21,6 @@ public class MLSystemService {
 
     private static final Logger logger = LoggerFactory.getLogger(MLSystemService.class);
 
-    // URL indicato nel README del ML (assicurati che la porta sia giusta, es. 8000)
     @Value("${ml.system.url:http://localhost:8000/api/predict_landmarks}")
     private String mlSystemUrl;
 
@@ -33,21 +32,16 @@ public class MLSystemService {
         this.messagingTemplate = messagingTemplate;
     }
 
-    /**
-     * Invia un chunk di frame al ML e gestisce la risposta.
-     */
     public void processFramesAndBroadcast(String meetingId, List<FrameData> frames) {
         if (frames.isEmpty()) return;
 
         try {
-            // logger.info("Sending {} frames to ML for meeting {}", frames.size(), meetingId);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
             HttpEntity<List<FrameData>> request = new HttpEntity<>(frames, headers);
 
-            // Chiamata POST all'API Python
             MLResponse response = restTemplate.postForObject(mlSystemUrl, request, MLResponse.class);
 
             if (response != null && response.getResults() != null) {
@@ -58,7 +52,6 @@ public class MLSystemService {
 
         } catch (Exception e) {
             logger.error("Error communicating with ML system: {}", e.getMessage());
-            // Opzionale: Inviare un errore al frontend se serve
         }
     }
 
@@ -67,17 +60,17 @@ public class MLSystemService {
         Map<String, Object> message = new HashMap<>();
 
         if ("word_added".equals(result.getStatus())) {
-            // Caso 1: Parola rilevata -> Aggiornamento parziale
+            // Case 1: Partial
             message.put("type", "PARTIAL");
-            message.put("words", result.getCurrentWords()); // Es. ["NEED", "PHONE"]
+            message.put("words", result.getCurrentWords()); // Eg. ["NEED", "PHONE"]
             message.put("last_prediction", result.getPrediction());
 
             logger.info("Broadcasting PARTIAL: {} to {}", result.getCurrentWords(), destination);
 
         } else if ("end_of_sentence".equals(result.getStatus())) {
-            // Caso 2: Frase finita -> Sostituzione finale
+            // Case 2: End of sentence -> FINAL
             message.put("type", "FINAL");
-            message.put("text", result.getSentence()); // Es. "I need a phone."
+            message.put("text", result.getSentence()); // Eg. "I need a phone."
 
             logger.info("Broadcasting FINAL: {} to {}", result.getSentence(), destination);
         }
