@@ -1,5 +1,20 @@
 # SignSpeak
 
+**Demo of the product**
+
+SignSpeak is a tool used for translation of the ASL sign language into natural language in real-time during video conferences and meetings. It can also serve the purpose of local translation (like a regular translator).
+
+Project has fulfilled it's 1st release and is waiting for further development.
+
+Additional Features include:
+- Accessibility options,
+- Local mode,
+- Low-latency translation.
+
+For the full description of each part, please see the README filed included in specific folders.
+
+#### This project was developed as a semi-academic project during semester at Universita di Pisa with international group. Please check in with _Collaborators_ if you want to use it.
+
 ## I. **Frontend**
 The frontend is a **React (Vite)** application that manages the entire user experience and client-side processing. It runs entirely in the user's browser.
 
